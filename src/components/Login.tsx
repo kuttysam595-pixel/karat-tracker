@@ -98,9 +98,9 @@ export const Login = () => {
           </CardContent>
         </Card>
 
-        <p className="text-center text-sm text-slate-500 mt-6">
+        {/* <p className="text-center text-sm text-slate-500 mt-6">
           Default credentials: admin / admin
-        </p>
+        </p> */}
       </div>
     </div>
   );
