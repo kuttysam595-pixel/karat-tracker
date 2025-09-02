@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -105,6 +104,18 @@ export const AddSales = () => {
     }
   };
 
+  const calculateSellingCostFromWastage = (wastageValue: string, gramsValue: string) => {
+    if (!gramsValue || !wastageValue || formData.material !== 'gold' || formData.type !== 'retail') return 0;
+    
+    const grams = parseFloat(gramsValue);
+    const wastage = parseFloat(wastageValue) / 100;
+    const sellingGrams = grams + (grams * wastage);
+    const rate = is18Karat ? 
+      getRateByMaterialAndKarat('gold', '18k') : 
+      getRateByMaterialAndKarat('gold', '22k');
+    return rate ? rate.n_price * sellingGrams : 0;
+  };
+
   const calculateSellingCost = () => {
     if (!formData.p_grams || !formData.material) return 0;
     
@@ -116,15 +127,10 @@ export const AddSales = () => {
         const purity = parseFloat(formData.s_purity) / 100;
         return rate ? rate.n_price * grams * purity : 0;
       } else if (formData.type === 'retail') {
-        if (formData.wastage) {
-          const wastage = parseFloat(formData.wastage) / 100;
-          const sellingGrams = grams + (grams * wastage);
-          const rate = is18Karat ? 
-            getRateByMaterialAndKarat('gold', '18k') : 
-            getRateByMaterialAndKarat('gold', '22k');
-          return rate ? rate.n_price * sellingGrams : 0;
-        } else if (formData.s_cost) {
+        if (formData.s_cost) {
           return parseFloat(formData.s_cost);
+        } else if (formData.wastage) {
+          return calculateSellingCostFromWastage(formData.wastage, formData.p_grams);
         }
       }
     } else if (formData.material === 'silver') {
@@ -139,20 +145,22 @@ export const AddSales = () => {
     return 0;
   };
 
-  const calculateWastage = () => {
-    if (!formData.s_cost || !formData.p_grams || formData.material !== 'gold' || formData.type !== 'retail') {
+  const calculateWastageFromSellingCost = (sellingCostValue: string, gramsValue: string) => {
+    if (!sellingCostValue || !gramsValue || formData.material !== 'gold' || formData.type !== 'retail') {
       return 0;
     }
     
-    const sellingCost = parseFloat(formData.s_cost);
-    const grams = parseFloat(formData.p_grams);
+    const sellingCost = parseFloat(sellingCostValue);
+    const grams = parseFloat(gramsValue);
     const rate = is18Karat ? 
       getRateByMaterialAndKarat('gold', '18k') : 
       getRateByMaterialAndKarat('gold', '22k');
     
-    if (!rate) return 0;
+    if (!rate || rate.n_price === 0) return 0;
     
-    return ((sellingCost / (grams * rate.n_price)) - 1) * 100;
+    // Formula: wastage% = ((selling_cost / (grams * rate)) - 1) * 100
+    const wastage = ((sellingCost / (grams * rate.n_price)) - 1) * 100;
+    return wastage;
   };
 
   const calculateOldCost = () => {
@@ -218,10 +226,15 @@ export const AddSales = () => {
         newData.s_cost = '';
       }
       
-      // Auto-calculate selling cost when wastage changes
-      if (field === 'wastage' && newData.material === 'gold' && newData.type === 'retail') {
-        const calculatedCost = calculateSellingCost();
-        newData.s_cost = calculatedCost.toString();
+      // Auto-calculate selling cost when wastage changes (for gold retail)
+      if (field === 'wastage' && newData.material === 'gold' && newData.type === 'retail' && value) {
+        const calculatedCost = calculateSellingCostFromWastage(value, newData.p_grams);
+        newData.s_cost = calculatedCost > 0 ? calculatedCost.toFixed(2) : '';
+      }
+      
+      // Clear selling cost when wastage is cleared
+      if (field === 'wastage' && !value && newData.material === 'gold' && newData.type === 'retail') {
+        newData.s_cost = '';
       }
       
       return newData;
@@ -232,15 +245,76 @@ export const AddSales = () => {
     setFormData(prev => {
       const newData = { ...prev, s_cost: value };
       
-      // Auto-calculate wastage when selling cost changes
-      if (newData.material === 'gold' && newData.type === 'retail') {
-        const calculatedWastage = calculateWastage();
+      // Auto-calculate wastage when selling cost changes (for gold retail)
+      if (newData.material === 'gold' && newData.type === 'retail' && value && newData.p_grams) {
+        const calculatedWastage = calculateWastageFromSellingCost(value, newData.p_grams);
         newData.wastage = calculatedWastage.toFixed(2);
+      }
+      
+      // Clear wastage when selling cost is cleared
+      if (!value && newData.material === 'gold' && newData.type === 'retail') {
+        newData.wastage = '';
       }
       
       return newData;
     });
   };
+
+  // Handle 18k checkbox change
+  const handle18KaratChange = (checked: boolean) => {
+    setIs18Karat(checked);
+    
+    // Recalculate based on current values using the new karat selection
+    if (formData.material === 'gold' && formData.type === 'retail') {
+      if (formData.wastage && formData.p_grams) {
+        // Recalculate selling cost based on wastage with new karat
+        const grams = parseFloat(formData.p_grams);
+        const wastage = parseFloat(formData.wastage) / 100;
+        const sellingGrams = grams + (grams * wastage);
+        const rate = checked ? 
+          getRateByMaterialAndKarat('gold', '18k') : 
+          getRateByMaterialAndKarat('gold', '22k');
+        const calculatedCost = rate ? rate.n_price * sellingGrams : 0;
+        
+        setFormData(prev => ({
+          ...prev,
+          s_cost: calculatedCost > 0 ? calculatedCost.toFixed(2) : ''
+        }));
+      } else if (formData.s_cost && formData.p_grams) {
+        // Recalculate wastage based on selling cost with new karat
+        const sellingCost = parseFloat(formData.s_cost);
+        const grams = parseFloat(formData.p_grams);
+        const rate = checked ? 
+          getRateByMaterialAndKarat('gold', '18k') : 
+          getRateByMaterialAndKarat('gold', '22k');
+        
+        if (rate && rate.n_price > 0) {
+          const wastage = ((sellingCost / (grams * rate.n_price)) - 1) * 100;
+          setFormData(prev => ({
+            ...prev,
+            wastage: wastage.toFixed(2)
+          }));
+        }
+      }
+    }
+  };
+
+  const checkDuplicateSale = async (asofDate: string, itemName: string, pGrams: number) => {
+    const { data, error } = await supabase
+      .from('sales_log')
+      .select('inserted_by')
+      .eq('asof_date', asofDate)
+      .eq('item_name', itemName)
+      .eq('p_grams', pGrams)
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+      throw error;
+    }
+
+    return data;
+  };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -265,6 +339,17 @@ export const AddSales = () => {
       const sellingCost = calculateSellingCost();
       const oldCost = calculateOldCost();
       const profit = calculateProfit();
+      // Check for duplicate entry
+      const duplicateEntry = await checkDuplicateSale(
+        formData.asof_date,
+        formData.item_name,
+        parseFloat(formData.p_grams)
+      );
+
+      if (duplicateEntry) {
+        toast.error(`Duplicate entry detected! This sale (${formData.item_name} - ${formData.p_grams}g) for today was already entered by ${duplicateEntry.inserted_by}.`);
+        return;
+      }
 
       const salesData = {
         inserted_by: user.username,
@@ -541,66 +626,65 @@ export const AddSales = () => {
                   </div>
                 )}
 
-                {/* Show wastage for gold retail */}
+                {/* Show 18k checkbox and wastage for gold retail */}
                 {(formData.material === 'gold' && formData.type === 'retail') && (
                   <>
-                  <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2">
                       <Checkbox
                         id="is18k"
                         checked={is18Karat}
-                        onCheckedChange={(checked) => {
-                          setIs18Karat(checked as boolean);
-                          // Reset wastage and selling cost when unchecking
-                          if (!checked) {
-                            setFormData(prev => ({
-                              ...prev,
-                              wastage: '',
-                              s_cost: ''
-                            }));
-                          }
-                        }}
+                        onCheckedChange={handle18KaratChange}
                         disabled={isLoading || !canEnterSales}
                       />
                       <Label htmlFor="is18k" className="text-slate-700 font-medium">
                         Selling 18 Karat
                       </Label>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="wastage" className="text-slate-700 font-medium">Wastage (%)</Label>
-                      <Input
-                        id="wastage"
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={formData.wastage}
-                        onChange={(e) => handleInputChange('wastage', e.target.value)}
-                        className="border-slate-300 focus:border-green-400 focus:ring-green-400"
-                        disabled={isLoading || !canEnterSales}
-                      />
-                    </div>
                   </>
                 )}
               </div>
 
-              {/* Selling Cost */}
-              <div className="space-y-2">
-                <Label className="text-slate-700 font-medium">Selling Cost</Label>
-                {(formData.material === 'gold' && formData.type === 'retail') ? (
-                  <Input
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={formData.s_cost}
-                    onChange={(e) => handleSellingCostChange(e.target.value)}
-                    className="border-slate-300 focus:border-green-400 focus:ring-green-400 text-lg font-semibold"
-                    disabled={isLoading || !canEnterSales}
-                  />
-                ) : (
+              {/* Wastage and Selling Cost for Gold Retail */}
+              {(formData.material === 'gold' && formData.type === 'retail') && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="wastage" className="text-slate-700 font-medium">Wastage (%)</Label>
+                    <Input
+                      id="wastage"
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData.wastage}
+                      onChange={(e) => handleInputChange('wastage', e.target.value)}
+                      className="border-slate-300 focus:border-green-400 focus:ring-green-400"
+                      disabled={isLoading || !canEnterSales}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="s_cost_input" className="text-slate-700 font-medium">Selling Cost</Label>
+                    <Input
+                      id="s_cost_input"
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData.s_cost}
+                      onChange={(e) => handleSellingCostChange(e.target.value)}
+                      className="border-slate-300 focus:border-green-400 focus:ring-green-400 text-lg font-semibold"
+                      disabled={isLoading || !canEnterSales}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Selling Cost for non-gold retail or non-retail */}
+              {!(formData.material === 'gold' && formData.type === 'retail') && (
+                <div className="space-y-2">
+                  <Label className="text-slate-700 font-medium">Selling Cost (Calculated)</Label>
                   <div className="p-3 bg-slate-100 rounded-md text-lg font-semibold text-slate-800">
                     {formatCurrency(calculateSellingCost())}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
