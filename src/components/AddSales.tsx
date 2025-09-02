@@ -199,8 +199,16 @@ export const AddSales = () => {
     const sellingCost = calculateSellingCost();
     const purchaseCost = calculatePurchaseCost();
     const oldCost = calculateOldCost();
-    return sellingCost - purchaseCost - oldCost;
+  
+    if (oldCost !== undefined && oldCost !== null) {
+      // Explicit formula with old cost
+      return (sellingCost - oldCost) - (purchaseCost - oldCost);
+    } else {
+      // Fallback formula without old cost
+      return sellingCost - purchaseCost;
+    }
   };
+  
 
   const resetCostCalculatedFields = () => {
     setFormData(prev => ({
@@ -299,12 +307,13 @@ export const AddSales = () => {
     }
   };
 
-  const checkDuplicateSale = async (asofDate: string, itemName: string, pGrams: number) => {
+  const checkDuplicateSale = async (asofDate: string, itemName: string, customerName: string, pGrams: number) => {
     const { data, error } = await supabase
       .from('sales_log')
       .select('inserted_by')
       .eq('asof_date', asofDate)
       .eq('item_name', itemName)
+      .eq('customer_name', customerName)
       .eq('p_grams', pGrams)
       .single();
 
@@ -314,7 +323,6 @@ export const AddSales = () => {
 
     return data;
   };
-
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -343,11 +351,12 @@ export const AddSales = () => {
       const duplicateEntry = await checkDuplicateSale(
         formData.asof_date,
         formData.item_name,
+        formData.customer_name,
         parseFloat(formData.p_grams)
       );
 
       if (duplicateEntry) {
-        toast.error(`Duplicate entry detected! This sale (${formData.item_name} - ${formData.p_grams}g) for today was already entered by ${duplicateEntry.inserted_by}.`);
+        toast.error(`Duplicate entry detected! This sale (${formData.item_name} - ${formData.p_grams}g for ${formData.customer_name}) for today was already entered by ${duplicateEntry.inserted_by}.`);
         return;
       }
 

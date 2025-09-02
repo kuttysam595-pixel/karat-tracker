@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { logActivityWithContext } from '@/lib/activityLogger';
 
 interface DailyRate {
   material: string;
@@ -85,12 +86,50 @@ export const DailyRatesBanner = () => {
         o_price: rate.o_price,
       }));
 
-      const { error } = await supabase
+      // Get existing rates to determine INSERT vs UPDATE
+      const { data: existingRates } = await supabase
         .from('daily_rates')
-        .upsert(ratesToUpsert, { onConflict: 'asof_date,material,karat' });
+        .select('*')
+        .eq('asof_date', selectedDate);
+
+      const { data, error } = await supabase
+        .from('daily_rates')
+        .upsert(ratesToUpsert, { onConflict: 'asof_date,material,karat' })
+        .select();
 
       if (error) {
         throw error;
+      }
+
+      // Log activity for each rate that was inserted or updated
+      if (data) {
+        for (const newRate of data) {
+          const existingRate = existingRates?.find(
+            rate => rate.material === newRate.material && rate.karat === newRate.karat
+          );
+          
+          if (existingRate) {
+            // UPDATE operation
+            await logActivityWithContext(
+              user.username,
+              'daily_rates',
+              'UPDATE',
+              newRate.id,
+              existingRate,
+              newRate
+            );
+          } else {
+            // INSERT operation
+            await logActivityWithContext(
+              user.username,
+              'daily_rates',
+              'INSERT',
+              newRate.id,
+              undefined,
+              newRate
+            );
+          }
+        }
       }
 
       setRates(editingRates);
@@ -126,7 +165,7 @@ export const DailyRatesBanner = () => {
   };
 
   return (
-    <Card className="mb-6 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 border-0 shadow-xl">
+    <Card className="mb-6 bg-gradient-to-r from-green-900 via-emerald-600 to-green-900 border-0 shadow-xl">
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">

@@ -26,6 +26,12 @@ export const AddExpense = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!user) {
+      toast.error('User not authenticated');
+      return;
+    }
+
     if (!user || !formData.asof_date || !formData.expense_type || !formData.item_name || !formData.cost) {
       toast.error('Please fill all fields');
       return;
@@ -33,6 +39,19 @@ export const AddExpense = () => {
 
     setIsLoading(true);
     try {
+
+      // Check for duplicate expense entry
+      const duplicateEntry = await checkDuplicateExpense(
+        formData.asof_date,
+        formData.expense_type,
+        formData.item_name
+      );
+
+      if (duplicateEntry) {
+        toast.error(`Duplicate expense detected! This expense (${formData.expense_type} - ${formData.item_name}) for today was already entered by ${duplicateEntry.inserted_by}.`);
+        return;
+      }
+
       const expenseData = {
         inserted_by: user.username,
         asof_date: formData.asof_date,
@@ -77,6 +96,23 @@ export const AddExpense = () => {
       [field]: value
     }));
   };
+
+  const checkDuplicateExpense = async (asofDate: string, expenseType: string, itemName: string) => {
+    const { data, error } = await supabase
+      .from('expense_log')
+      .select('inserted_by')
+      .eq('asof_date', asofDate)
+      .eq('expense_type', expenseType)
+      .eq('item_name', itemName)
+      .single();
+  
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+      throw error;
+    }
+  
+    return data;
+  };
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50 p-4">
