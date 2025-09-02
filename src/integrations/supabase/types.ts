@@ -14,6 +14,56 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_log: {
+        Row: {
+          id: string
+          user_id: string
+          table_name: string
+          action: string
+          record_id: string | null
+          old_data: Json | null
+          new_data: Json | null
+          timestamp: string
+          ip_address: string | null
+          user_agent: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          table_name: string
+          action: string
+          record_id?: string | null
+          old_data?: Json | null
+          new_data?: Json | null
+          timestamp?: string
+          ip_address?: string | null
+          user_agent?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          table_name?: string
+          action?: string
+          record_id?: string | null
+          old_data?: Json | null
+          new_data?: Json | null
+          timestamp?: string
+          ip_address?: string | null
+          user_agent?: string | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["username"]
+          },
+        ]
+      }
       daily_rates: {
         Row: {
           asof_date: string
@@ -220,7 +270,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      set_current_user: {
+        Args: {
+          username: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

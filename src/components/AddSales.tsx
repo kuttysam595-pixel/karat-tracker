@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { logActivityWithContext } from '@/lib/activityLogger';
 
 interface DailyRate {
   material: string;
@@ -193,9 +194,29 @@ export const AddSales = () => {
     return sellingCost - purchaseCost - oldCost;
   };
 
+  const resetCostCalculatedFields = () => {
+    setFormData(prev => ({
+      ...prev,
+      s_purity: '',
+      wastage: '',
+      s_cost: '',
+      o1_gram: '',
+      o1_purity: '',
+      o2_gram: '',
+      o2_purity: ''
+    }));
+  };
+
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
+      
+      // Reset cost calculated fields when transaction type changes
+      if (field === 'type') {
+        newData.s_purity = '';
+        newData.wastage = '';
+        newData.s_cost = '';
+      }
       
       // Auto-calculate selling cost when wastage changes
       if (field === 'wastage' && newData.material === 'gold' && newData.type === 'retail') {
@@ -268,13 +289,25 @@ export const AddSales = () => {
         profit: profit
       };
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('sales_log')
-        .insert(salesData);
+        .insert(salesData)
+        .select()
+        .single();
 
       if (error) {
         throw error;
       }
+
+      // Log the activity manually
+      await logActivityWithContext(
+        user.username,
+        'sales_log',
+        'INSERT',
+        data.id,
+        undefined,
+        data
+      );
 
       toast.success('Sale recorded successfully!');
       navigate('/dashboard');
@@ -511,6 +544,27 @@ export const AddSales = () => {
                 {/* Show wastage for gold retail */}
                 {(formData.material === 'gold' && formData.type === 'retail') && (
                   <>
+                  <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="is18k"
+                        checked={is18Karat}
+                        onCheckedChange={(checked) => {
+                          setIs18Karat(checked as boolean);
+                          // Reset wastage and selling cost when unchecking
+                          if (!checked) {
+                            setFormData(prev => ({
+                              ...prev,
+                              wastage: '',
+                              s_cost: ''
+                            }));
+                          }
+                        }}
+                        disabled={isLoading || !canEnterSales}
+                      />
+                      <Label htmlFor="is18k" className="text-slate-700 font-medium">
+                        Selling 18 Karat
+                      </Label>
+                    </div>
                     <div className="space-y-2">
                       <Label htmlFor="wastage" className="text-slate-700 font-medium">Wastage (%)</Label>
                       <Input
@@ -523,17 +577,6 @@ export const AddSales = () => {
                         className="border-slate-300 focus:border-green-400 focus:ring-green-400"
                         disabled={isLoading || !canEnterSales}
                       />
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="is18k"
-                        checked={is18Karat}
-                        onCheckedChange={(checked) => setIs18Karat(checked as boolean)}
-                        disabled={isLoading || !canEnterSales}
-                      />
-                      <Label htmlFor="is18k" className="text-slate-700 font-medium">
-                        Selling 18 Karat
-                      </Label>
                     </div>
                   </>
                 )}
@@ -570,7 +613,19 @@ export const AddSales = () => {
                   <Checkbox
                     id="showOldMaterials"
                     checked={showOldMaterials}
-                    onCheckedChange={(checked) => setShowOldMaterials(checked as boolean)}
+                    onCheckedChange={(checked) => {
+                      setShowOldMaterials(checked as boolean);
+                      // Reset old material fields when unchecking
+                      if (!checked) {
+                        setFormData(prev => ({
+                          ...prev,
+                          o1_gram: '',
+                          o1_purity: '',
+                          o2_gram: '',
+                          o2_purity: ''
+                        }));
+                      }
+                    }}
                     disabled={isLoading || !canEnterSales}
                   />
                   <Label htmlFor="showOldMaterials" className="text-sm font-normal">
