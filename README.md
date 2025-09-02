@@ -1,22 +1,12 @@
-# Welcome to your Lovable project
+# Karat Tracker
 
-## Project info
+A comprehensive jewelry management application for tracking karats, sales, and expenses.
 
-**URL**: https://lovable.dev/projects/6be685d7-18f6-4dc3-8d4b-eb1d85b88f29
+## Project Info
 
-## How can I edit this code?
+This is a React-based application built with modern web technologies for managing jewelry inventory and transactions.
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/6be685d7-18f6-4dc3-8d4b-eb1d85b88f29) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## How to Run Locally
 
 The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
@@ -30,44 +20,43 @@ git clone <YOUR_GIT_URL>
 cd <YOUR_PROJECT_NAME>
 
 # Step 3: Install the necessary dependencies.
-npm i
+npm install
 
 # Step 4: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Development Scripts
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- `npm run dev` - Start the development server
+- `npm run build` - Build for production
+- `npm run build:dev` - Build for development
+- `npm run lint` - Run ESLint
+- `npm run preview` - Preview the production build
 
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
+## Technologies Used
 
 This project is built with:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- **Vite** - Fast build tool and development server
+- **TypeScript** - Type-safe JavaScript
+- **React** - UI framework
+- **shadcn-ui** - Modern UI components
+- **Tailwind CSS** - Utility-first CSS framework
+- **Supabase** - Backend database and authentication
+- **React Query** - Data fetching and caching
+- **React Hook Form** - Form management
+- **Zod** - Schema validation
+- **Recharts** - Data visualization
 
-## How can I deploy this project?
+## Features
 
-Simply open [Lovable](https://lovable.dev/projects/6be685d7-18f6-4dc3-8d4b-eb1d85b88f29) and click on Share -> Publish.
+- User authentication
+- Sales tracking and management
+- Expense tracking
+- Daily rates management
+- Dashboard with analytics
+- Data export functionality
+- Responsive design
 
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+## Project Structure
