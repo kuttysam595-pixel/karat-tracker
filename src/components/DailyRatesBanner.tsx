@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -71,28 +70,24 @@ export const DailyRatesBanner = () => {
   };
 
   const handleSave = async () => {
-    if (!user) return;
+    if (!user) {
+      toast.error('You must be logged in to save rates');
+      return;
+    }
 
     try {
-      // Delete existing rates for this date
-      await supabase
-        .from('daily_rates')
-        .delete()
-        .eq('asof_date', selectedDate);
-
-      // Insert new rates
-      const ratesToInsert = editingRates.map(rate => ({
+      const ratesToUpsert = editingRates.map(rate => ({
         inserted_by: user.username,
         asof_date: selectedDate,
         material: rate.material,
         karat: rate.karat,
         n_price: rate.n_price,
-        o_price: rate.o_price
+        o_price: rate.o_price,
       }));
 
       const { error } = await supabase
         .from('daily_rates')
-        .insert(ratesToInsert);
+        .upsert(ratesToUpsert, { onConflict: 'asof_date,material,karat' });
 
       if (error) {
         throw error;
