@@ -14,7 +14,207 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      daily_rates: {
+        Row: {
+          asof_date: string
+          created_at: string | null
+          date_time: string | null
+          id: string
+          inserted_by: string
+          karat: string
+          material: string
+          n_price: number
+          o_price: number
+        }
+        Insert: {
+          asof_date: string
+          created_at?: string | null
+          date_time?: string | null
+          id?: string
+          inserted_by: string
+          karat: string
+          material: string
+          n_price: number
+          o_price: number
+        }
+        Update: {
+          asof_date?: string
+          created_at?: string | null
+          date_time?: string | null
+          id?: string
+          inserted_by?: string
+          karat?: string
+          material?: string
+          n_price?: number
+          o_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_rates_inserted_by_fkey"
+            columns: ["inserted_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["username"]
+          },
+        ]
+      }
+      expense_log: {
+        Row: {
+          asof_date: string
+          cost: number
+          created_at: string | null
+          date_time: string | null
+          expense_type: string
+          id: string
+          inserted_by: string
+          item_name: string
+        }
+        Insert: {
+          asof_date: string
+          cost: number
+          created_at?: string | null
+          date_time?: string | null
+          expense_type: string
+          id?: string
+          inserted_by: string
+          item_name: string
+        }
+        Update: {
+          asof_date?: string
+          cost?: number
+          created_at?: string | null
+          date_time?: string | null
+          expense_type?: string
+          id?: string
+          inserted_by?: string
+          item_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_log_inserted_by_fkey"
+            columns: ["inserted_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["username"]
+          },
+        ]
+      }
+      sales_log: {
+        Row: {
+          asof_date: string
+          created_at: string | null
+          customer_name: string
+          customer_phone: string
+          date_time: string | null
+          id: string
+          inserted_by: string
+          item_name: string
+          material: string
+          o_cost: number | null
+          o1_gram: number | null
+          o1_purity: number | null
+          o2_gram: number | null
+          o2_purity: number | null
+          p_cost: number
+          p_grams: number
+          p_purity: number
+          profit: number
+          s_cost: number
+          s_purity: number | null
+          tag_no: string
+          type: string
+          wastage: number | null
+        }
+        Insert: {
+          asof_date: string
+          created_at?: string | null
+          customer_name: string
+          customer_phone: string
+          date_time?: string | null
+          id?: string
+          inserted_by: string
+          item_name: string
+          material: string
+          o_cost?: number | null
+          o1_gram?: number | null
+          o1_purity?: number | null
+          o2_gram?: number | null
+          o2_purity?: number | null
+          p_cost: number
+          p_grams: number
+          p_purity: number
+          profit: number
+          s_cost: number
+          s_purity?: number | null
+          tag_no: string
+          type: string
+          wastage?: number | null
+        }
+        Update: {
+          asof_date?: string
+          created_at?: string | null
+          customer_name?: string
+          customer_phone?: string
+          date_time?: string | null
+          id?: string
+          inserted_by?: string
+          item_name?: string
+          material?: string
+          o_cost?: number | null
+          o1_gram?: number | null
+          o1_purity?: number | null
+          o2_gram?: number | null
+          o2_purity?: number | null
+          p_cost?: number
+          p_grams?: number
+          p_purity?: number
+          profit?: number
+          s_cost?: number
+          s_purity?: number | null
+          tag_no?: string
+          type?: string
+          wastage?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_log_inserted_by_fkey"
+            columns: ["inserted_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["username"]
+          },
+        ]
+      }
+      users: {
+        Row: {
+          created_at: string | null
+          id: string
+          password: string
+          role: string
+          sessionid: string | null
+          updated_at: string | null
+          username: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          password: string
+          role: string
+          sessionid?: string | null
+          updated_at?: string | null
+          username: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          password?: string
+          role?: string
+          sessionid?: string | null
+          updated_at?: string | null
+          username?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
