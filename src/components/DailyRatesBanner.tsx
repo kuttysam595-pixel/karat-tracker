@@ -28,7 +28,7 @@ export const DailyRatesBanner = () => {
     { material: 'gold', karat: '24k', n_price: 0, o_price: 0 },
     { material: 'gold', karat: '22k', n_price: 0, o_price: 0 },
     { material: 'gold', karat: '18k', n_price: 0, o_price: 0 },
-    { material: 'silver', karat: 'NA', n_price: 0, o_price: 0 },
+    { material: 'silver', karat: '', n_price: 0, o_price: 0 },
   ];
 
   useEffect(() => {
@@ -248,7 +248,7 @@ export const DailyRatesBanner = () => {
                     </p>
                   )}
                 </div>
-                {rate.karat !== '18k' && (
+                {(rate.karat !== '18k' && rate.karat !== '22k') && (
                   <div>
                     <Label className="text-xs text-amber-100">Old Price</Label>
                     {isEditing ? (
