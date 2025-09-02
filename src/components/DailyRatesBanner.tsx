@@ -2,14 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Calendar, Edit3, Save, X, TrendingUp } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Edit, Save, X, TrendingUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { logActivity } from '@/utils/activityLogger';
 
-interface DailyRate {
+interface Rate {
+  id: string;
   material: string;
   karat: string;
   n_price: number;
@@ -17,56 +19,50 @@ interface DailyRate {
 }
 
 export const DailyRatesBanner = () => {
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [rates, setRates] = useState<DailyRate[]>([]);
+  const [rates, setRates] = useState<Rate[]>([]);
+  const [editingRates, setEditingRates] = useState<Rate[]>([]);
   const [isEditing, setIsEditing] = useState(false);
-  const [editingRates, setEditingRates] = useState<DailyRate[]>([]);
+  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const { user } = useAuth();
-
-  const defaultRates: DailyRate[] = [
-    { material: 'gold', karat: '24k', n_price: 0, o_price: 0 },
-    { material: 'gold', karat: '22k', n_price: 0, o_price: 0 },
-    { material: 'gold', karat: '18k', n_price: 0, o_price: 0 },
-    { material: 'silver', karat: 'NA', n_price: 0, o_price: 0 },
-  ];
 
   useEffect(() => {
     fetchRates();
   }, [selectedDate]);
 
   const fetchRates = async () => {
-    const { data, error } = await supabase
-      .from('daily_rates')
-      .select('*')
-      .eq('asof_date', selectedDate);
+    try {
+      const { data, error } = await supabase
+        .from('daily_rates')
+        .select('*')
+        .eq('asof_date', selectedDate);
 
-    if (error) {
-      console.error('Error fetching rates:', error);
-      return;
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        setRates(data);
+        setEditingRates(data.map(rate => ({ ...rate })));
+      }
+    } catch (error) {
+      console.error('Error fetching daily rates:', error);
+      toast.error('Failed to fetch daily rates');
     }
-
-    const ratesMap = new Map();
-    data?.forEach(rate => {
-      ratesMap.set(`${rate.material}_${rate.karat}`, rate);
-    });
-
-    const formattedRates = defaultRates.map(defaultRate => {
-      const existing = ratesMap.get(`${defaultRate.material}_${defaultRate.karat}`);
-      return existing ? {
-        material: existing.material,
-        karat: existing.karat,
-        n_price: existing.n_price,
-        o_price: existing.o_price
-      } : defaultRate;
-    });
-
-    setRates(formattedRates);
-    localStorage.setItem(`rates_${selectedDate}`, JSON.stringify(formattedRates));
   };
 
   const handleEdit = () => {
-    setEditingRates([...rates]);
     setIsEditing(true);
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+    setEditingRates(rates.map(rate => ({ ...rate })));
+  };
+
+  const handleInputChange = (index: number, field: string, value: string) => {
+    const newRates = [...editingRates];
+    newRates[index][field] = value;
+    setEditingRates(newRates);
   };
 
   const handleSave = async () => {
@@ -93,143 +89,129 @@ export const DailyRatesBanner = () => {
         throw error;
       }
 
-      setRates(editingRates);
+      // Log the activity
+      await logActivity({
+        username: user.username,
+        role: user.role,
+        action: 'upsert',
+        table_name: 'daily_rates',
+        description: `Updated daily rates for ${selectedDate}`,
+        metadata: {
+          date: selectedDate,
+          ratesCount: ratesToUpsert.length,
+          rates: ratesToUpsert
+        }
+      });
+
+      toast.success('Daily rates saved successfully!');
       setIsEditing(false);
-      localStorage.setItem(`rates_${selectedDate}`, JSON.stringify(editingRates));
-      toast.success('Daily rates updated successfully!');
+      fetchRates();
     } catch (error) {
       console.error('Error saving rates:', error);
       toast.error('Failed to save rates');
     }
   };
 
-  const handleCancel = () => {
-    setEditingRates([]);
-    setIsEditing(false);
-  };
-
-  const updateEditingRate = (index: number, field: 'n_price' | 'o_price', value: string) => {
-    const newRates = [...editingRates];
-    newRates[index] = {
-      ...newRates[index],
-      [field]: parseFloat(value) || 0
-    };
-    setEditingRates(newRates);
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
-
   return (
-    <Card className="mb-6 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 border-0 shadow-xl">
+    <Card className="shadow-md border-0 bg-white/80 backdrop-blur-sm">
       <CardContent className="p-6">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/20 rounded-full">
+            <div className="p-2 bg-gradient-to-br from-amber-400 to-yellow-500 rounded-full">
               <TrendingUp className="h-5 w-5 text-white" />
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-white">Daily Rates</h2>
-              <p className="text-amber-100 text-sm">Current market prices</p>
-            </div>
+            <h2 className="text-lg font-semibold text-slate-800">Daily Gold & Silver Rates</h2>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-white" />
-              <Input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-white/20 border-white/30 text-white placeholder-white/70 focus:bg-white/30"
-                disabled={isEditing}
-              />
-            </div>
-            {!isEditing ? (
-              <Button
-                onClick={handleEdit}
-                size="sm"
-                variant="secondary"
-                className="bg-white/20 hover:bg-white/30 text-white border-white/30"
-              >
-                <Edit3 className="h-4 w-4 mr-2" />
-                Edit
-              </Button>
-            ) : (
-              <div className="flex gap-2">
+          <div className="flex items-center gap-4">
+            <Input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="max-w-xs border-slate-300 focus:border-amber-400 focus:ring-amber-400 text-sm"
+              disabled={isEditing}
+            />
+            {isEditing ? (
+              <>
                 <Button
                   onClick={handleSave}
                   size="sm"
-                  className="bg-green-600 hover:bg-green-700 text-white"
+                  className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-semibold"
                 >
                   <Save className="h-4 w-4 mr-2" />
                   Save
                 </Button>
                 <Button
                   onClick={handleCancel}
+                  variant="outline"
                   size="sm"
-                  variant="secondary"
-                  className="bg-red-600 hover:bg-red-700 text-white"
+                  className="border-slate-300 text-slate-700"
                 >
                   <X className="h-4 w-4 mr-2" />
                   Cancel
                 </Button>
-              </div>
+              </>
+            ) : (
+              <Button
+                onClick={handleEdit}
+                variant="outline"
+                size="sm"
+                className="border-amber-300 text-amber-700 hover:bg-amber-100"
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Rates
+              </Button>
             )}
           </div>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {(isEditing ? editingRates : rates).map((rate, index) => (
-            <div
-              key={`${rate.material}_${rate.karat}`}
-              className="bg-white/15 backdrop-blur-sm rounded-lg p-4 border border-white/20"
-            >
-              <h3 className="font-semibold text-white mb-3 text-center">
-                {rate.material.charAt(0).toUpperCase() + rate.material.slice(1)} {rate.karat}
-              </h3>
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-xs text-amber-100">New Price</Label>
-                  {isEditing ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Material
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Karat
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  New Price (₹)
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Old Price (₹)
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-slate-200">
+              {editingRates.map((rate, index) => (
+                <tr key={rate.id}>
+                  <td className="px-4 py-2 whitespace-nowrap">
+                    <Badge className="bg-slate-100 text-slate-700 border-0">{rate.material}</Badge>
+                  </td>
+                  <td className="px-4 py-2 whitespace-nowrap">
+                    {rate.karat}
+                  </td>
+                  <td className="px-4 py-2 whitespace-nowrap">
                     <Input
                       type="number"
                       value={rate.n_price}
-                      onChange={(e) => updateEditingRate(index, 'n_price', e.target.value)}
-                      className="bg-white/20 border-white/30 text-white placeholder-white/50 text-sm"
-                      placeholder="0"
+                      onChange={(e) => handleInputChange(index, 'n_price', e.target.value)}
+                      className="w-24 border-slate-300 focus:border-amber-400 focus:ring-amber-400 text-sm"
+                      disabled={!isEditing}
                     />
-                  ) : (
-                    <p className="text-white font-semibold text-lg">
-                      {rate.n_price > 0 ? formatCurrency(rate.n_price) : '₹0'}
-                    </p>
-                  )}
-                </div>
-                {rate.karat !== '18k' && (
-                  <div>
-                    <Label className="text-xs text-amber-100">Old Price</Label>
-                    {isEditing ? (
-                      <Input
-                        type="number"
-                        value={rate.o_price}
-                        onChange={(e) => updateEditingRate(index, 'o_price', e.target.value)}
-                        className="bg-white/20 border-white/30 text-white placeholder-white/50 text-sm"
-                        placeholder="0"
-                      />
-                    ) : (
-                      <p className="text-amber-100 font-medium">
-                        {rate.o_price > 0 ? formatCurrency(rate.o_price) : '₹0'}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+                  </td>
+                  <td className="px-4 py-2 whitespace-nowrap">
+                    <Input
+                      type="number"
+                      value={rate.o_price}
+                      onChange={(e) => handleInputChange(index, 'o_price', e.target.value)}
+                      className="w-24 border-slate-300 focus:border-amber-400 focus:ring-amber-400 text-sm"
+                      disabled={!isEditing}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </CardContent>
     </Card>

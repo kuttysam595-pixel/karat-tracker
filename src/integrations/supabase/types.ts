@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_log: {
+        Row: {
+          action: string
+          created_at: string
+          description: string | null
+          id: string
+          metadata: Json
+          role: string
+          row_id: string | null
+          table_name: string | null
+          username: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json
+          role: string
+          row_id?: string | null
+          table_name?: string | null
+          username: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json
+          role?: string
+          row_id?: string | null
+          table_name?: string | null
+          username?: string
+        }
+        Relationships: []
+      }
       daily_rates: {
         Row: {
           asof_date: string

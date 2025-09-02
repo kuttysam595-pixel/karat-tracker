@@ -9,6 +9,7 @@ import { Login } from "@/components/Login";
 import { Dashboard } from "@/components/Dashboard";
 import { AddExpense } from "@/components/AddExpense";
 import { AddSales } from "@/components/AddSales";
+import { Reports } from "@/components/Reports";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -55,6 +56,11 @@ const AppContent = () => {
         <Route path="/add-sales" element={
           <ProtectedRoute>
             <AddSales />
+          </ProtectedRoute>
+        } />
+        <Route path="/reports" element={
+          <ProtectedRoute>
+            <Reports />
           </ProtectedRoute>
         } />
         <Route path="/" element={<Index />} />

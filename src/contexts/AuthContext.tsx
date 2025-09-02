@@ -1,6 +1,6 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { logActivity } from '@/utils/activityLogger';
 
 interface User {
   id: string;
@@ -76,7 +76,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('sessionId', sessionId);
         localStorage.setItem('username', username);
         
-        setUser({ ...data, sessionid: sessionId });
+        const userData = { ...data, sessionid: sessionId };
+        setUser(userData);
+
+        // Log successful login
+        await logActivity({
+          username: userData.username,
+          role: userData.role,
+          action: 'login',
+          description: `User ${userData.username} logged in successfully`,
+          metadata: { sessionId }
+        });
+
         return true;
       }
       return false;
@@ -86,7 +97,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if (user) {
+      // Log logout before clearing user data
+      await logActivity({
+        username: user.username,
+        role: user.role,
+        action: 'logout',
+        description: `User ${user.username} logged out`,
+        metadata: { sessionId: user.sessionid }
+      });
+    }
+
     localStorage.removeItem('sessionId');
     localStorage.removeItem('username');
     setUser(null);
