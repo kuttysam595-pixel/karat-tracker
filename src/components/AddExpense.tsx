@@ -11,7 +11,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { logActivity } from '@/utils/activityLogger';
 
 export const AddExpense = () => {
   const navigate = useNavigate();
@@ -33,34 +32,19 @@ export const AddExpense = () => {
 
     setIsLoading(true);
     try {
-      const expenseData = {
-        inserted_by: user.username,
-        asof_date: formData.asof_date,
-        expense_type: formData.expense_type,
-        item_name: formData.item_name,
-        cost: parseFloat(formData.cost)
-      };
-
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('expense_log')
-        .insert(expenseData)
-        .select()
-        .single();
+        .insert({
+          inserted_by: user.username,
+          asof_date: formData.asof_date,
+          expense_type: formData.expense_type,
+          item_name: formData.item_name,
+          cost: parseFloat(formData.cost)
+        });
 
       if (error) {
         throw error;
       }
-
-      // Log the activity
-      await logActivity({
-        username: user.username,
-        role: user.role,
-        action: 'insert',
-        table_name: 'expense_log',
-        row_id: data.id,
-        description: `Added expense: ${formData.item_name} - ₹${formData.cost}`,
-        metadata: expenseData
-      });
 
       toast.success('Expense added successfully!');
       navigate('/dashboard');

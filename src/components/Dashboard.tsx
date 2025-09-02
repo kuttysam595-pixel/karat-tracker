@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DailyRatesBanner } from './DailyRatesBanner';
 import { useAuth } from '@/contexts/AuthContext';
-import { PlusCircle, Receipt, ShoppingCart, LogOut, User, Crown, BarChart3 } from 'lucide-react';
+import { PlusCircle, Receipt, ShoppingCart, LogOut, User, Crown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export const Dashboard = () => {
@@ -14,8 +14,6 @@ export const Dashboard = () => {
   const handleLogout = () => {
     logout();
   };
-
-  const isAdminOrOwner = user && ['admin', 'owner'].includes(user.role);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50">
@@ -60,7 +58,7 @@ export const Dashboard = () => {
         <DailyRatesBanner />
 
         {/* Action Cards */}
-        <div className={`grid grid-cols-1 ${isAdminOrOwner ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6`}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card className="group cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 border-0 bg-white/90 backdrop-blur-sm">
             <CardContent className="p-8">
               <div className="flex items-center justify-between mb-6">
@@ -102,29 +100,6 @@ export const Dashboard = () => {
               </Button>
             </CardContent>
           </Card>
-
-          {isAdminOrOwner && (
-            <Card className="group cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 border-0 bg-white/90 backdrop-blur-sm">
-              <CardContent className="p-8">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="p-4 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full group-hover:scale-110 transition-transform duration-300">
-                    <BarChart3 className="h-8 w-8 text-white" />
-                  </div>
-                  <PlusCircle className="h-6 w-6 text-purple-500 group-hover:text-purple-600" />
-                </div>
-                <h3 className="text-xl font-semibold text-slate-800 mb-2">Reports & Analytics</h3>
-                <p className="text-slate-600 mb-6">
-                  Generate detailed reports and export data with comprehensive analytics
-                </p>
-                <Button
-                  onClick={() => navigate('/reports')}
-                  className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold shadow-lg"
-                >
-                  View Reports
-                </Button>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
     </div>
