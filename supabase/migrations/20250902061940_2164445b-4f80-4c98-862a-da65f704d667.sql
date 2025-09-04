@@ -91,3 +91,19 @@ CREATE POLICY "Users can insert sales" ON public.sales_log FOR INSERT WITH CHECK
 
 -- Create unique constraint for daily rates to prevent duplicates
 CREATE UNIQUE INDEX daily_rates_unique ON public.daily_rates (asof_date, material, karat);
+
+
+-- Create activity_log table for tracking all database changes
+CREATE TABLE public.activity_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL REFERENCES public.users(username),
+    table_name TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('INSERT', 'UPDATE', 'DELETE')),
+    record_id UUID,
+    old_data JSONB,
+    new_data JSONB,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    ip_address INET,
+    user_agent TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
