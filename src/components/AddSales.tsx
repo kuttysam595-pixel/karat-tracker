@@ -99,7 +99,7 @@ export const AddSales = () => {
       const rate = getRateByMaterialAndKarat('gold', '24k');
       return rate ? rate.n_price * grams * purity : 0;
     } else {
-      const rate = getRateByMaterialAndKarat('silver', 'NA');
+      const rate = getRateByMaterialAndKarat('silver', '');
       return rate ? rate.n_price * grams * purity : 0;
     }
   };
@@ -134,7 +134,7 @@ export const AddSales = () => {
         }
       }
     } else if (formData.material === 'silver') {
-      const rate = getRateByMaterialAndKarat('silver', 'NA');
+      const rate = getRateByMaterialAndKarat('silver', '');
       if (formData.type === 'wholesale' && formData.s_purity) {
         const purity = parseFloat(formData.s_purity) / 100;
         return rate ? rate.n_price * grams * purity : 0;
@@ -174,7 +174,7 @@ export const AddSales = () => {
         const rate = getRateByMaterialAndKarat('gold', '24k');
         totalOldCost += rate ? rate.o_price * grams * purity : 0;
       } else {
-        const rate = getRateByMaterialAndKarat('silver', 'NA');
+        const rate = getRateByMaterialAndKarat('silver', '');
         totalOldCost += rate ? rate.o_price * grams * purity : 0;
       }
     }
@@ -187,7 +187,7 @@ export const AddSales = () => {
         const rate = getRateByMaterialAndKarat('gold', '24k');
         totalOldCost += rate ? rate.o_price * grams * purity : 0;
       } else {
-        const rate = getRateByMaterialAndKarat('silver', 'NA');
+        const rate = getRateByMaterialAndKarat('silver', '');
         totalOldCost += rate ? rate.o_price * grams * purity : 0;
       }
     }
