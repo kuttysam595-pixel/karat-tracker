@@ -81,7 +81,15 @@ export const AddExpense = () => {
       );
 
       toast.success('Expense added successfully!');
-      navigate('/dashboard');
+      
+      // Clear form fields except date
+      setFormData(prev => ({
+        ...prev,
+        expense_type: '',
+        item_name: '',
+        cost: ''
+      }));
+
     } catch (error) {
       console.error('Error adding expense:', error);
       toast.error('Failed to add expense');

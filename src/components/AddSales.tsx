@@ -404,7 +404,32 @@ export const AddSales = () => {
       );
 
       toast.success('Sale recorded successfully!');
-      navigate('/dashboard');
+    //  navigate('/dashboard');
+           
+      // Clear all form fields except date and reset component states
+      setFormData(prev => ({
+        ...prev,
+        material: '',
+        type: '',
+        item_name: '',
+        tag_no: '',
+        customer_name: '',
+        customer_phone: '',
+        p_grams: '',
+        p_purity: '',
+        s_purity: '',
+        wastage: '',
+        s_cost: '',
+        o1_gram: '',
+        o1_purity: '',
+        o2_gram: '',
+        o2_purity: ''
+      }));
+      
+      // Reset component states
+      setShowOldMaterials(false);
+      setIs18Karat(false);
+
     } catch (error) {
       console.error('Error adding sale:', error);
       toast.error('Failed to record sale');
