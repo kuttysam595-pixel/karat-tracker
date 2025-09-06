@@ -1,0 +1,3 @@
+# keep this file from being changed during merges (use 'ours' driver)
+supabase/config.toml merge=ours
+.env merge=ours
