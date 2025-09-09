@@ -118,6 +118,7 @@ export type Database = {
           id: string
           inserted_by: string
           item_name: string
+          udhaar: boolean
         }
         Insert: {
           asof_date: string
@@ -128,6 +129,7 @@ export type Database = {
           id?: string
           inserted_by: string
           item_name: string
+          udhaar?: boolean
         }
         Update: {
           asof_date?: string
@@ -138,6 +140,7 @@ export type Database = {
           id?: string
           inserted_by?: string
           item_name?: string
+          udhaar?: boolean
         }
         Relationships: [
           {
