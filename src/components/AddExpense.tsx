@@ -20,7 +20,8 @@ export const AddExpense = () => {
     asof_date: format(new Date(), 'yyyy-MM-dd'),
     expense_type: '',
     item_name: '',
-    cost: ''
+    cost: '',
+    udhaar: false
   });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -57,7 +58,8 @@ export const AddExpense = () => {
         asof_date: formData.asof_date,
         expense_type: formData.expense_type,
         item_name: formData.item_name,
-        cost: parseFloat(formData.cost)
+        cost: parseFloat(formData.cost),
+        udhaar: formData.udhaar
       };
 
       const { data, error } = await supabase
@@ -87,7 +89,8 @@ export const AddExpense = () => {
         ...prev,
         expense_type: '',
         item_name: '',
-        cost: ''
+        cost: '',
+        udhaar: false
       }));
 
     } catch (error) {
@@ -212,6 +215,23 @@ export const AddExpense = () => {
                   className="border-slate-300 focus:border-blue-400 focus:ring-blue-400"
                   disabled={isLoading}
                 />
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="udhaar"
+                  checked={formData.udhaar}
+                  onChange={(e) => handleInputChange('udhaar', e.target.checked)}
+                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                  disabled={isLoading}
+                />
+                <Label htmlFor="udhaar" className="text-slate-700 font-medium">
+                  Udhaar (Credit)
+                </Label>
+                <span className="text-sm text-slate-500">
+                  Check if this is a credit/loan expense
+                </span>
               </div>
 
               <div className="flex gap-4 pt-4">

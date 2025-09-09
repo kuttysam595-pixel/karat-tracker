@@ -139,10 +139,15 @@ export const AddSales = () => {
         const purity = parseFloat(formData.s_purity) / 100;
         return rate ? rate.n_price * grams * purity : 0;
       } else if (formData.type === 'retail') {
-        return rate ? rate.n_price * grams : 0;
+        // Check if user has manually entered a selling cost for silver retail
+        if (formData.s_cost) {
+          return parseFloat(formData.s_cost);
+        } else {
+          // Fall back to calculated value if no manual entry
+          return rate ? rate.n_price * grams : 0;
+        }
       }
     }
-    return 0;
   };
 
   const calculateWastageFromSellingCost = (sellingCostValue: string, gramsValue: string) => {
@@ -262,6 +267,13 @@ export const AddSales = () => {
       // Clear wastage when selling cost is cleared
       if (!value && newData.material === 'gold' && newData.type === 'retail') {
         newData.wastage = '';
+      }
+
+      // Handle silver retail manual override - ensure calculated value is overridden
+      if (newData.material === 'silver' && newData.type === 'retail') {
+        // For silver retail, we simply override the calculated selling cost with user input
+        // No additional calculations needed (no wastage for silver)
+        newData.s_cost = value;
       }
       
       return newData;
@@ -530,6 +542,29 @@ export const AddSales = () => {
                 </div>
               </div>
 
+              {/* Daily Rates Display */}
+              {rates.length > 0 && (
+                <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {rates.map((rate, index) => (
+                      <div key={index} className="text-center">
+                        <span className="text-sm text-slate-600 capitalize">
+                          {rate.material} {rate.karat && rate.karat !== '' ? rate.karat : ''}
+                        </span>
+                        <div className="text-xl font-bold text-slate-800">
+                          {formatCurrency(rate.n_price)}
+                        </div>
+                        {rate.o_price > 0 && rate.o_price !== rate.n_price && (
+                          <div className="text-sm text-slate-500">
+                            Old: {formatCurrency(rate.o_price)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="item_name" className="text-slate-700 font-medium">Item Name *</Label>
@@ -710,8 +745,37 @@ export const AddSales = () => {
                 </div>
               )}
 
-              {/* Selling Cost for non-gold retail or non-retail */}
-              {!(formData.material === 'gold' && formData.type === 'retail') && (
+              {/* Selling Cost for Silver Retail */}
+              {(formData.material === 'silver' && formData.type === 'retail') && (
+                <div className="space-y-2">
+                  <Label htmlFor="s_cost_silver" className="text-slate-700 font-medium">Selling Cost</Label>
+                  <div className="relative">
+                    <Input
+                      id="s_cost_silver"
+                      type="number"
+                      step="0.01"
+                      placeholder={calculateSellingCost() > 0 ? calculateSellingCost().toString() : "0.00"}
+                      value={formData.s_cost || (calculateSellingCost() > 0 ? calculateSellingCost().toString() : "")}
+                      onChange={(e) => handleSellingCostChange(e.target.value)}
+                      className="border-slate-300 focus:border-green-400 focus:ring-green-400 text-lg font-semibold pr-16"
+                      disabled={isLoading || !canEnterSales}
+                    />
+                    {(!formData.s_cost || formData.s_cost === "") && calculateSellingCost() > 0 && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-500 font-normal">
+                        {formatCurrency(calculateSellingCost())}
+                      </div>
+                    )}
+                  </div>
+                  {(!formData.s_cost || formData.s_cost === "") && calculateSellingCost() > 0 && (
+                    <p className="text-sm text-slate-600">
+                      Calculated: {formatCurrency(calculateSellingCost())} - You can override this value
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Selling Cost for non-gold/non-silver retail or non-retail */}
+              {!(formData.material === 'gold' && formData.type === 'retail') && !(formData.material === 'silver' && formData.type === 'retail') && (
                 <div className="space-y-2">
                   <Label className="text-slate-700 font-medium">Selling Cost (Calculated)</Label>
                   <div className="p-3 bg-slate-100 rounded-md text-lg font-semibold text-slate-800">
