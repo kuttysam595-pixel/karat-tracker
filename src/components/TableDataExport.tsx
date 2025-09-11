@@ -353,7 +353,7 @@ export const TableDataExport = () => {
     // Add totals row if there are numeric columns
     const totalsRow = columns.map(col => {
       if (totals[col] !== undefined) {
-        return `"TOTAL: ${totals[col]}"`;
+        return `"TOTAL: ${totals[col].toFixed(2)}"`;
       }
       return '""';
     });
@@ -580,8 +580,8 @@ export const TableDataExport = () => {
                             {totals[column] !== undefined ? (
                               <div className="flex items-center gap-1">
                                 <span className="text-blue-600">{getColumnDisplayName(column)}:</span>
-                                <span>{totals[column].toLocaleString()}</span>
-                              </div>
+                                <span>{totals[column].toFixed(2)}</span>
+                            </div>
                             ) : (
                               '-'
                             )}
