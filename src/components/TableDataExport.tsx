@@ -338,7 +338,7 @@ export const TableDataExport = () => {
     }
 
     // Create CSV content with filtered data
-    const headers = columns.join(',');
+    const headers = columns.map(col => getColumnDisplayName(col)).join(',');
     const rows = filteredData.map(row => 
       columns.map(col => {
         const value = row[col];
