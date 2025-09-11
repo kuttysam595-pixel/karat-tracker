@@ -27,7 +27,7 @@ CREATE TABLE public.daily_rates (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
--- Create expense_log table
+-- Create expense_log table with udhaar column included
 CREATE TABLE public.expense_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     inserted_by TEXT NOT NULL REFERENCES public.users(username),
@@ -36,12 +36,13 @@ CREATE TABLE public.expense_log (
     expense_type TEXT NOT NULL CHECK (expense_type IN ('direct', 'indirect')),
     item_name TEXT NOT NULL,
     cost DECIMAL(10,2) NOT NULL,
+    udhaar BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
 -- Add udhaar column to expense_log table
-ALTER TABLE public.expense_log 
-ADD COLUMN udhaar BOOLEAN DEFAULT false;
+--ALTER TABLE public.expense_log 
+--ADD COLUMN udhaar BOOLEAN DEFAULT false;
 
 -- Create sales_log table
 CREATE TABLE public.sales_log (
