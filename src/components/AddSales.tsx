@@ -345,7 +345,7 @@ export const AddSales = () => {
     }
 
     // Validate required fields
-    const requiredFields = ['material', 'type', 'item_name', 'tag_no', 'customer_name', 'customer_phone', 'p_grams', 'p_purity'];
+    const requiredFields = ['material', 'type', 'item_name', 'tag_no', 'customer_name', 'p_grams', 'p_purity'];
     const missingFields = requiredFields.filter(field => !formData[field as keyof typeof formData]);
     
     if (missingFields.length > 0) {
@@ -542,6 +542,33 @@ export const AddSales = () => {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="customer_name" className="text-slate-700 font-medium">Customer Name *</Label>
+                  <Input
+                    id="customer_name"
+                    type="text"
+                    placeholder="Enter customer name"
+                    value={formData.customer_name}
+                    onChange={(e) => handleInputChange('customer_name', e.target.value)}
+                    className="border-slate-300 focus:border-green-400 focus:ring-green-400"
+                    disabled={isLoading || !canEnterSales}
+                  />
+                </div>
+                <div className="space-y-2">
+                <Label htmlFor="customer_phone" className="text-slate-700 font-medium">Customer Phone</Label>
+                  <Input
+                    id="customer_phone"
+                    type="tel"
+                    placeholder="Enter customer phone"
+                    value={formData.customer_phone}
+                    onChange={(e) => handleInputChange('customer_phone', e.target.value)}
+                    className="border-slate-300 focus:border-green-400 focus:ring-green-400"
+                    disabled={isLoading || !canEnterSales}
+                  />
+                </div>
+              </div>
+
               {/* Daily Rates Display */}
               {rates.length > 0 && (
                 <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
@@ -564,9 +591,21 @@ export const AddSales = () => {
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
+          {/* Purchase & Selling Details */}
+          <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-xl text-slate-800 flex items-center gap-2">
+                <Calculator className="h-5 w-5" />
+                Purchase & Selling Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Purchase Details Row */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
                   <Label htmlFor="item_name" className="text-slate-700 font-medium">Item Name *</Label>
                   <Input
                     id="item_name"
@@ -590,46 +629,8 @@ export const AddSales = () => {
                     disabled={isLoading || !canEnterSales}
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="customer_name" className="text-slate-700 font-medium">Customer Name *</Label>
-                  <Input
-                    id="customer_name"
-                    type="text"
-                    placeholder="Enter customer name"
-                    value={formData.customer_name}
-                    onChange={(e) => handleInputChange('customer_name', e.target.value)}
-                    className="border-slate-300 focus:border-green-400 focus:ring-green-400"
-                    disabled={isLoading || !canEnterSales}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="customer_phone" className="text-slate-700 font-medium">Customer Phone *</Label>
-                  <Input
-                    id="customer_phone"
-                    type="tel"
-                    placeholder="Enter customer phone"
-                    value={formData.customer_phone}
-                    onChange={(e) => handleInputChange('customer_phone', e.target.value)}
-                    className="border-slate-300 focus:border-green-400 focus:ring-green-400"
-                    disabled={isLoading || !canEnterSales}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Purchase Details */}
-          <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="text-xl text-slate-800">Purchase Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="p_grams" className="text-slate-700 font-medium">Purchase Grams *</Label>
+                  <Label htmlFor="p_grams" className="text-slate-700 font-medium">Purchase & Selling Grams *</Label>
                   <Input
                     id="p_grams"
                     type="number"
@@ -660,23 +661,16 @@ export const AddSales = () => {
                     {formatCurrency(calculatePurchaseCost())}
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              
 
-          {/* Selling Details */}
-          <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="text-xl text-slate-800">Selling Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-slate-700 font-medium">Selling Grams</Label>
-                  <div className="p-3 bg-slate-100 rounded-md text-lg font-semibold text-slate-800">
+              {/* Selling Details Row 
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-1">
+                  <Label className="text-slate-600 text-sm font-normal">Selling Grams</Label>
+                  <div className="px-2 py-1 bg-slate-50 rounded text-sm font-medium text-slate-700 border border-slate-200">
                     {formData.p_grams ? parseFloat(formData.p_grams).toFixed(3) : '0.000'} g
                   </div>
-                </div>
+                </div> */}
 
                 {/* Show selling purity for gold/silver wholesale */}
                 {((formData.material === 'gold' || formData.material === 'silver') && formData.type === 'wholesale') && (
@@ -695,21 +689,19 @@ export const AddSales = () => {
                   </div>
                 )}
 
-                {/* Show 18k checkbox and wastage for gold retail */}
+                {/* Show 18k checkbox for gold retail */}
                 {(formData.material === 'gold' && formData.type === 'retail') && (
-                  <>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="is18k"
-                        checked={is18Karat}
-                        onCheckedChange={handle18KaratChange}
-                        disabled={isLoading || !canEnterSales}
-                      />
-                      <Label htmlFor="is18k" className="text-slate-700 font-medium">
-                        Selling 18 Karat
-                      </Label>
-                    </div>
-                  </>
+                  <div className="flex items-center space-x-2 pt-6">
+                    <Checkbox
+                      id="is18k"
+                      checked={is18Karat}
+                      onCheckedChange={handle18KaratChange}
+                      disabled={isLoading || !canEnterSales}
+                    />
+                    <Label htmlFor="is18k" className="text-slate-700 font-medium">
+                      Selling 18 Karat
+                    </Label>
+                  </div>
                 )}
               </div>
 
@@ -936,11 +928,11 @@ export const AddSales = () => {
             </Button>
             <Button
               type="submit"
-              className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold"
+              className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold"
               disabled={isLoading || !canEnterSales}
             >
               <Save className="h-4 w-4 mr-2" />
-              {isLoading ? 'Saving...' : 'Save Sale'}
+              {isLoading ? 'Completing...' : 'Complete Sales'}
             </Button>
           </div>
         </form>
