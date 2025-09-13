@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, ShoppingCart, Save, Calculator } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Save, Calculator, Plus, Trash2, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,6 +20,35 @@ interface DailyRate {
   o_price: number;
 }
 
+interface SaleEntry {
+  id: string;
+  formData: {
+    asof_date: string;
+    material: string;
+    type: string;
+    item_name: string;
+    tag_no: string;
+    customer_name: string;
+    customer_phone: string;
+    p_grams: string;
+    p_purity: string;
+    s_purity: string;
+    wastage: string;
+    s_cost: string;
+    o1_gram: string;
+    o1_purity: string;
+    o2_gram: string;
+    o2_purity: string;
+  };
+  calculations: {
+    purchaseCost: number;
+    sellingCost: number;
+    oldCost: number;
+    profit: number;
+  };
+  timestamp: Date;
+}
+
 export const AddSales = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -27,6 +56,8 @@ export const AddSales = () => {
   const [showOldMaterials, setShowOldMaterials] = useState(false);
   const [is18Karat, setIs18Karat] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [batchMode, setBatchMode] = useState(false);
+  const [saleEntries, setSaleEntries] = useState<SaleEntry[]>([]);
 
   const [formData, setFormData] = useState({
     asof_date: format(new Date(), 'yyyy-MM-dd'),
@@ -213,7 +244,7 @@ export const AddSales = () => {
       return sellingCost - purchaseCost;
     }
   };
-  
+
 
   const resetCostCalculatedFields = () => {
     setFormData(prev => ({
@@ -320,23 +351,114 @@ export const AddSales = () => {
   };
 
   const checkDuplicateSale = async (asofDate: string, itemName: string, customerName: string, pGrams: number) => {
-    const { data, error } = await supabase
-      .from('sales_log')
-      .select('inserted_by')
-      .eq('asof_date', asofDate)
-      .eq('item_name', itemName)
-      .eq('customer_name', customerName)
-      .eq('p_grams', pGrams)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('sales_log')
+        .select('inserted_by')
+        .eq('asof_date', asofDate)
+        .eq('item_name', itemName)
+        .eq('customer_name', customerName)
+        .eq('p_grams', pGrams)
+        .limit(1);
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+      if (error) {
+        console.error('Error checking for duplicate sale:', error);
+        throw error;
+      }
+
+      // If any rows found, return the first one (duplicate exists)
+      if (data && data.length > 0) {
+        return data[0];
+      }
+
+      // No duplicates found
+      return null;
+    } catch (error) {
+      console.error('Error checking for duplicate sale:', error);
       throw error;
     }
-
-    return data;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const addToBatch = () => {
+    // Validate required fields
+    const requiredFields = ['material', 'type', 'item_name', 'tag_no', 'customer_name', 'p_grams', 'p_purity'];
+    const missingFields = requiredFields.filter(field => !formData[field as keyof typeof formData]);
+    
+    if (missingFields.length > 0) {
+      toast.error('Please fill all required fields before adding to batch');
+      return;
+    }
+
+    // Check for duplicates within the batch
+    const isDuplicateInBatch = saleEntries.some(entry => 
+      entry.formData.item_name === formData.item_name &&
+      entry.formData.customer_name === formData.customer_name &&
+      parseFloat(entry.formData.p_grams) === parseFloat(formData.p_grams)
+    );
+
+    if (isDuplicateInBatch) {
+      toast.error(`Duplicate entry detected! This item (${formData.item_name} - ${formData.p_grams}g for ${formData.customer_name}) already exists in the batch.`);
+      return;
+    }
+
+    // Enable batch mode when first item is added
+    setBatchMode(true);
+
+    const newEntry: SaleEntry = {
+      id: Date.now().toString(),
+      formData: { ...formData },
+      calculations: {
+        purchaseCost: calculatePurchaseCost(),
+        sellingCost: calculateSellingCost(),
+        oldCost: calculateOldCost(),
+        profit: calculateProfit()
+      },
+      timestamp: new Date()
+    };
+
+    setSaleEntries(prev => [...prev, newEntry]);
+    
+    // Only clear purchase and selling specific fields, keep customer info and other shared data
+    setFormData(prev => ({
+      ...prev,
+      // Keep these values for the next item
+      asof_date: prev.asof_date,
+      material: prev.material,
+      type: prev.type,
+      customer_name: prev.customer_name,
+      customer_phone: prev.customer_phone,
+      // Reset only purchase and selling specific fields
+      item_name: '',
+      tag_no: '',
+      p_grams: '',
+      p_purity: '',
+      s_purity: '',
+      wastage: '',
+      s_cost: '',
+      o1_gram: '',
+      o1_purity: '',
+      o2_gram: '',
+      o2_purity: ''
+    }));
+    
+    // Reset component states that are item-specific
+    setShowOldMaterials(false);
+    setIs18Karat(false);
+
+    toast.success('Item added to batch successfully!');
+  };
+
+  const clearBatch = () => {
+    setSaleEntries([]);
+    toast.success('Batch cleared');
+  };
+
+  const removeFromBatch = (entryId: string) => {
+    setSaleEntries(prev => prev.filter(entry => entry.id !== entryId));
+    toast.success('Item removed from batch');
+  };
+
+  const submitSingleSale = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!user || rates.length === 0) {
@@ -345,7 +467,7 @@ export const AddSales = () => {
     }
 
     // Validate required fields
-    const requiredFields = ['material', 'type', 'item_name', 'tag_no', 'customer_name', 'customer_phone', 'p_grams', 'p_purity'];
+    const requiredFields = ['material', 'type', 'item_name', 'tag_no', 'customer_name', 'p_grams', 'p_purity'];
     const missingFields = requiredFields.filter(field => !formData[field as keyof typeof formData]);
     
     if (missingFields.length > 0) {
@@ -354,12 +476,9 @@ export const AddSales = () => {
     }
 
     setIsLoading(true);
+    
+    // Check for duplicate entry first (outside try-catch to handle errors properly)
     try {
-      const purchaseCost = calculatePurchaseCost();
-      const sellingCost = calculateSellingCost();
-      const oldCost = calculateOldCost();
-      const profit = calculateProfit();
-      // Check for duplicate entry
       const duplicateEntry = await checkDuplicateSale(
         formData.asof_date,
         formData.item_name,
@@ -368,9 +487,22 @@ export const AddSales = () => {
       );
 
       if (duplicateEntry) {
-        toast.error(`Duplicate entry detected! This sale (${formData.item_name} - ${formData.p_grams}g for ${formData.customer_name}) for today was already entered by ${duplicateEntry.inserted_by}.`);
+        toast.error(`Duplicate entry detected! This sale (${formData.item_name} - ${formData.p_grams}g for ${formData.customer_name}) was already entered by ${duplicateEntry.inserted_by}.`);
+        setIsLoading(false);
         return;
       }
+    } catch (error) {
+      console.error('Error checking for duplicate sale:', error);
+      toast.error('Failed to check for duplicate entries. Please try again.');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const purchaseCost = calculatePurchaseCost();
+      const sellingCost = calculateSellingCost();
+      const oldCost = calculateOldCost();
+      const profit = calculateProfit();
 
       const salesData = {
         inserted_by: user.username,
@@ -417,8 +549,8 @@ export const AddSales = () => {
 
       toast.success('Sale recorded successfully!');
     //  navigate('/dashboard');
-           
-      // Clear all form fields except date and reset component states
+      // Clear batch and form
+      setSaleEntries([]);
       setFormData(prev => ({
         ...prev,
         material: '',
@@ -438,15 +570,151 @@ export const AddSales = () => {
         o2_purity: ''
       }));
       
-      // Reset component states
       setShowOldMaterials(false);
       setIs18Karat(false);
+      setBatchMode(false);
 
     } catch (error) {
-      console.error('Error adding sale:', error);
-      toast.error('Failed to record sale');
+      console.error('Error adding batch sales:', error);
+      toast.error('Failed to record batch sales');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const submitBatchSales = async () => {
+    if (saleEntries.length === 0) {
+      toast.error('No items in batch to submit');
+      return;
+    }
+
+    if (!user || rates.length === 0) {
+      toast.error('Daily rates not available for selected date');
+      return;
+    }
+
+    setIsLoading(true);
+    
+    // Check for duplicates in all batch entries first (outside try-catch to handle errors properly)
+    try {
+      const duplicateChecks = await Promise.all(
+        saleEntries.map(async (entry) => {
+          const duplicateEntry = await checkDuplicateSale(
+            entry.formData.asof_date,
+            entry.formData.item_name,
+            entry.formData.customer_name,
+            parseFloat(entry.formData.p_grams)
+          );
+          return { entry, duplicateEntry };
+        })
+      );
+
+      // Find any duplicates
+      const duplicates = duplicateChecks.filter(check => check.duplicateEntry !== null);
+      
+      if (duplicates.length > 0) {
+        const duplicateMessages = duplicates.map(({ entry, duplicateEntry }) => 
+          `${entry.formData.item_name} - ${entry.formData.p_grams}g for ${entry.formData.customer_name} (entered by ${duplicateEntry!.inserted_by})`
+        );
+        
+        toast.error(`Duplicate entries detected! The following items were already entered today:\n${duplicateMessages.join('\n')}`);
+        setIsLoading(false);
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking for duplicate sales:', error);
+      toast.error('Failed to check for duplicate entries. Please try again.');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+
+      const salesData = saleEntries.map(entry => ({
+        inserted_by: user.username,
+        asof_date: entry.formData.asof_date,
+        material: entry.formData.material,
+        type: entry.formData.type,
+        item_name: entry.formData.item_name,
+        tag_no: entry.formData.tag_no,
+        customer_name: entry.formData.customer_name,
+        customer_phone: entry.formData.customer_phone,
+        p_grams: parseFloat(entry.formData.p_grams),
+        p_purity: parseFloat(entry.formData.p_purity),
+        p_cost: entry.calculations.purchaseCost,
+        s_purity: entry.formData.s_purity ? parseFloat(entry.formData.s_purity) : null,
+        wastage: entry.formData.wastage ? parseFloat(entry.formData.wastage) : null,
+        s_cost: entry.calculations.sellingCost,
+        o1_gram: entry.formData.o1_gram ? parseFloat(entry.formData.o1_gram) : null,
+        o1_purity: entry.formData.o1_purity ? parseFloat(entry.formData.o1_purity) : null,
+        o2_gram: entry.formData.o2_gram ? parseFloat(entry.formData.o2_gram) : null,
+        o2_purity: entry.formData.o2_purity ? parseFloat(entry.formData.o2_purity) : null,
+        o_cost: entry.calculations.oldCost,
+        profit: entry.calculations.profit
+      }));
+
+      const { data, error } = await supabase
+        .from('sales_log')
+        .insert(salesData)
+        .select();
+
+      if (error) {
+        throw error;
+      }
+
+      // Log activity for each sale
+      for (const sale of data) {
+        await logActivityWithContext(
+          user.username,
+          'sales_log',
+          'INSERT',
+          sale.id,
+          undefined,
+          sale
+        );
+      }
+
+      toast.success(`${saleEntries.length} sales recorded successfully!`);
+      
+      // Clear batch and form
+      setSaleEntries([]);
+      setFormData(prev => ({
+        ...prev,
+        material: '',
+        type: '',
+        item_name: '',
+        tag_no: '',
+        customer_name: '',
+        customer_phone: '',
+        p_grams: '',
+        p_purity: '',
+        s_purity: '',
+        wastage: '',
+        s_cost: '',
+        o1_gram: '',
+        o1_purity: '',
+        o2_gram: '',
+        o2_purity: ''
+      }));
+      
+      setShowOldMaterials(false);
+      setIs18Karat(false);
+      setBatchMode(false);
+
+    } catch (error) {
+      console.error('Error adding batch sales:', error);
+      toast.error('Failed to record batch sales');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    // If we have batch entries, submit them, otherwise submit single sale
+    if (saleEntries.length > 0) {
+      submitBatchSales();
+    } else {
+      submitSingleSale(e);
     }
   };
 
@@ -460,10 +728,22 @@ export const AddSales = () => {
 
   const canEnterSales = rates.length > 0;
 
+  // Calculate batch totals
+  const batchTotals = saleEntries.reduce(
+    (totals, entry) => ({
+      purchaseCost: totals.purchaseCost + entry.calculations.purchaseCost,
+      sellingCost: totals.sellingCost + entry.calculations.sellingCost,
+      oldCost: totals.oldCost + entry.calculations.oldCost,
+      profit: totals.profit + entry.calculations.profit,
+      count: totals.count + 1
+    }),
+    { purchaseCost: 0, sellingCost: 0, oldCost: 0, profit: 0, count: 0 }
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50 p-2 md:p-4">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
+        <div className="flex items-center gap-2 md:gap-4 mb-3 md:mb-6">
           <Button
             onClick={() => navigate('/dashboard')}
             variant="outline"
@@ -473,38 +753,38 @@ export const AddSales = () => {
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Dashboard
           </Button>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full">
-              <ShoppingCart className="h-6 w-6 text-white" />
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="p-1.5 md:p-2 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full">
+              <ShoppingCart className="h-5 w-5 md:h-6 md:w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-800">Add Sales</h1>
-              <p className="text-slate-600">Record a new sales transaction</p>
+              <h1 className="text-xl md:text-2xl font-bold text-slate-800">Add Sales</h1>
+              <p className="text-sm md:text-base text-slate-600">Record a new sales transaction</p>
             </div>
           </div>
         </div>
 
         {!canEnterSales && (
-          <Card className="mb-6 bg-red-50 border-red-200">
-            <CardContent className="p-4">
-              <p className="text-red-700 font-medium">
+          <Card className="mb-3 md:mb-6 bg-red-50 border-red-200">
+            <CardContent className="p-3 md:p-4">
+              <p className="text-red-700 font-medium text-sm">
                 ⚠️ Daily rates are not available for the selected date. Please set the daily rates first before recording sales.
               </p>
             </CardContent>
           </Card>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-3 md:space-y-6">
           {/* Basic Information */}
           <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="text-xl text-slate-800 flex items-center gap-2">
-                <Calculator className="h-5 w-5" />
+            <CardHeader className="pb-3 md:pb-6">
+              <CardTitle className="text-lg md:text-xl text-slate-800 flex items-center gap-2">
+                <Calculator className="h-4 w-4 md:h-5 md:w-5" />
                 Basic Information
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <CardContent className="space-y-4 md:space-y-6 pt-0">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="asof_date" className="text-slate-700 font-medium">Date *</Label>
                   <Input
@@ -542,20 +822,47 @@ export const AddSales = () => {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="customer_name" className="text-slate-700 font-medium">Customer Name *</Label>
+                  <Input
+                    id="customer_name"
+                    type="text"
+                    placeholder="Enter customer name"
+                    value={formData.customer_name}
+                    onChange={(e) => handleInputChange('customer_name', e.target.value)}
+                    className="border-slate-300 focus:border-green-400 focus:ring-green-400"
+                    disabled={isLoading || !canEnterSales}
+                  />
+                </div>
+                <div className="space-y-2">
+                <Label htmlFor="customer_phone" className="text-slate-700 font-medium">Customer Phone</Label>
+                  <Input
+                    id="customer_phone"
+                    type="tel"
+                    placeholder="Enter customer phone"
+                    value={formData.customer_phone}
+                    onChange={(e) => handleInputChange('customer_phone', e.target.value)}
+                    className="border-slate-300 focus:border-green-400 focus:ring-green-400"
+                    disabled={isLoading || !canEnterSales}
+                  />
+                </div>
+              </div>
+
               {/* Daily Rates Display */}
               {rates.length > 0 && (
-                <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="mt-4 md:mt-6 p-3 md:p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
                     {rates.map((rate, index) => (
                       <div key={index} className="text-center">
-                        <span className="text-sm text-slate-600 capitalize">
+                        <span className="text-xs md:text-sm text-slate-600 capitalize">
                           {rate.material} {rate.karat && rate.karat !== '' ? rate.karat : ''}
                         </span>
-                        <div className="text-xl font-bold text-slate-800">
+                        <div className="text-lg md:text-xl font-bold text-slate-800">
                           {formatCurrency(rate.n_price)}
                         </div>
                         {rate.o_price > 0 && rate.o_price !== rate.n_price && (
-                          <div className="text-sm text-slate-500">
+                          <div className="text-xs md:text-sm text-slate-500">
                             Old: {formatCurrency(rate.o_price)}
                           </div>
                         )}
@@ -564,9 +871,21 @@ export const AddSales = () => {
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
+          {/* Purchase & Selling Details */}
+          <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
+            <CardHeader className="pb-3 md:pb-6">
+              <CardTitle className="text-lg md:text-xl text-slate-800 flex items-center gap-2">
+                <Calculator className="h-4 w-4 md:h-5 md:w-5" />
+                Purchase & Selling Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 md:space-y-6 pt-0">
+              {/* Purchase Details Row */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+              <div className="space-y-2">
                   <Label htmlFor="item_name" className="text-slate-700 font-medium">Item Name *</Label>
                   <Input
                     id="item_name"
@@ -590,46 +909,8 @@ export const AddSales = () => {
                     disabled={isLoading || !canEnterSales}
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="customer_name" className="text-slate-700 font-medium">Customer Name *</Label>
-                  <Input
-                    id="customer_name"
-                    type="text"
-                    placeholder="Enter customer name"
-                    value={formData.customer_name}
-                    onChange={(e) => handleInputChange('customer_name', e.target.value)}
-                    className="border-slate-300 focus:border-green-400 focus:ring-green-400"
-                    disabled={isLoading || !canEnterSales}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="customer_phone" className="text-slate-700 font-medium">Customer Phone *</Label>
-                  <Input
-                    id="customer_phone"
-                    type="tel"
-                    placeholder="Enter customer phone"
-                    value={formData.customer_phone}
-                    onChange={(e) => handleInputChange('customer_phone', e.target.value)}
-                    className="border-slate-300 focus:border-green-400 focus:ring-green-400"
-                    disabled={isLoading || !canEnterSales}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Purchase Details */}
-          <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="text-xl text-slate-800">Purchase Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="p_grams" className="text-slate-700 font-medium">Purchase Grams *</Label>
+                  <Label htmlFor="p_grams" className="text-slate-700 font-medium">Purchase & Selling Grams *</Label>
                   <Input
                     id="p_grams"
                     type="number"
@@ -660,23 +941,16 @@ export const AddSales = () => {
                     {formatCurrency(calculatePurchaseCost())}
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              
 
-          {/* Selling Details */}
-          <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="text-xl text-slate-800">Selling Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-slate-700 font-medium">Selling Grams</Label>
-                  <div className="p-3 bg-slate-100 rounded-md text-lg font-semibold text-slate-800">
+              {/* Selling Details Row 
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-1">
+                  <Label className="text-slate-600 text-sm font-normal">Selling Grams</Label>
+                  <div className="px-2 py-1 bg-slate-50 rounded text-sm font-medium text-slate-700 border border-slate-200">
                     {formData.p_grams ? parseFloat(formData.p_grams).toFixed(3) : '0.000'} g
                   </div>
-                </div>
+                </div> */}
 
                 {/* Show selling purity for gold/silver wholesale */}
                 {((formData.material === 'gold' || formData.material === 'silver') && formData.type === 'wholesale') && (
@@ -695,27 +969,25 @@ export const AddSales = () => {
                   </div>
                 )}
 
-                {/* Show 18k checkbox and wastage for gold retail */}
+                {/* Show 18k checkbox for gold retail */}
                 {(formData.material === 'gold' && formData.type === 'retail') && (
-                  <>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="is18k"
-                        checked={is18Karat}
-                        onCheckedChange={handle18KaratChange}
-                        disabled={isLoading || !canEnterSales}
-                      />
-                      <Label htmlFor="is18k" className="text-slate-700 font-medium">
-                        Selling 18 Karat
-                      </Label>
-                    </div>
-                  </>
+                  <div className="flex items-center space-x-2 pt-6">
+                    <Checkbox
+                      id="is18k"
+                      checked={is18Karat}
+                      onCheckedChange={handle18KaratChange}
+                      disabled={isLoading || !canEnterSales}
+                    />
+                    <Label htmlFor="is18k" className="text-slate-700 font-medium">
+                      Selling 18 Karat
+                    </Label>
+                  </div>
                 )}
               </div>
 
               {/* Wastage and Selling Cost for Gold Retail */}
               {(formData.material === 'gold' && formData.type === 'retail') && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="wastage" className="text-slate-700 font-medium">Wastage (%)</Label>
                     <Input
@@ -784,12 +1056,27 @@ export const AddSales = () => {
                 </div>
               )}
             </CardContent>
-          </Card>
+
+            {/* Add to Batch Button - Always visible */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200">
+              <Button
+                onClick={(e) => {
+                  e.preventDefault();
+                  addToBatch();
+                }}
+                className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold"
+                disabled={isLoading || !canEnterSales}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add to Batch
+              </Button>
+            </div>
+            </Card>
 
           {/* Old Materials */}
           <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="text-xl text-slate-800 flex items-center justify-between">
+            <CardHeader className="pb-3 md:pb-6">
+              <CardTitle className="text-lg md:text-xl text-slate-800 flex items-center justify-between">
                 Old Materials
                 <div className="flex items-center space-x-2">
                   <Checkbox
@@ -810,18 +1097,18 @@ export const AddSales = () => {
                     }}
                     disabled={isLoading || !canEnterSales}
                   />
-                  <Label htmlFor="showOldMaterials" className="text-sm font-normal">
+                  <Label htmlFor="showOldMaterials" className="text-xs md:text-sm font-normal">
                     Add Old Materials
                   </Label>
                 </div>
               </CardTitle>
             </CardHeader>
             {showOldMaterials && (
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-4 md:space-y-6 pt-0">
                 {/* Old Material 1 */}
                 <div>
-                  <h4 className="text-lg font-medium text-slate-700 mb-4">Old Material 1</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <h4 className="text-base md:text-lg font-medium text-slate-700 mb-3 md:mb-4">Old Material 1</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                     <div className="space-y-2">
                       <Label htmlFor="o1_gram" className="text-slate-700 font-medium">Old Grams</Label>
                       <Input
@@ -853,8 +1140,8 @@ export const AddSales = () => {
 
                 {/* Old Material 2 */}
                 <div>
-                  <h4 className="text-lg font-medium text-slate-700 mb-4">Old Material 2</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <h4 className="text-base md:text-lg font-medium text-slate-700 mb-3 md:mb-4">Old Material 2</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                     <div className="space-y-2">
                       <Label htmlFor="o2_gram" className="text-slate-700 font-medium">Old Grams</Label>
                       <Input
@@ -896,11 +1183,11 @@ export const AddSales = () => {
 
           {/* Summary */}
           <Card className="shadow-xl border-0 bg-gradient-to-r from-green-50 to-emerald-50">
-            <CardHeader>
-              <CardTitle className="text-xl text-slate-800">Transaction Summary</CardTitle>
+            <CardHeader className="pb-3 md:pb-6">
+              <CardTitle className="text-lg md:text-xl text-slate-800">Transaction Summary</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-center">
+            <CardContent className="pt-0">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 text-center">
                 <div>
                   <p className="text-sm text-slate-600">Purchase Cost</p>
                   <p className="text-lg font-bold text-slate-800">{formatCurrency(calculatePurchaseCost())}</p>
@@ -922,9 +1209,8 @@ export const AddSales = () => {
               </div>
             </CardContent>
           </Card>
-
-          {/* Submit Buttons */}
-          <div className="flex gap-4 pt-4">
+          {/* Submit Buttons - Only for single sales */}
+          <div className="flex gap-2 md:gap-4 pt-3 md:pt-4">
             <Button
               type="button"
               variant="outline"
@@ -936,14 +1222,132 @@ export const AddSales = () => {
             </Button>
             <Button
               type="submit"
-              className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold"
-              disabled={isLoading || !canEnterSales}
+              className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold"
+              disabled={isLoading || !canEnterSales || saleEntries.length > 0}
             >
               <Save className="h-4 w-4 mr-2" />
-              {isLoading ? 'Saving...' : 'Save Sale'}
+              {isLoading ? 'Completing...' : 'Complete Sales'}
             </Button>
+            {saleEntries.length > 0 && (
+              <Button
+                type="button"
+                onClick={submitBatchSales}
+                className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold"
+                disabled={isLoading}
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Complete Batch ({saleEntries.length})
+              </Button>
+            )}
           </div>
         </form>
+
+        {/* Batch Entries Display */}
+        {saleEntries.length > 0 && (
+          <Card className="mt-4 md:mt-6 shadow-xl border-0 bg-white/90 backdrop-blur-sm">
+            <CardHeader className="pb-3 md:pb-6">
+              <CardTitle className="text-lg md:text-xl text-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4 md:h-5 md:w-5" />
+                  Batch Entries ({saleEntries.length})
+                </div>
+                <Button
+                  onClick={clearBatch}
+                  variant="outline"
+                  size="sm"
+                  className="border-red-300 text-red-700 hover:bg-red-50"
+                  disabled={isLoading}
+                >
+                  Clear All
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 md:space-y-4 pt-0">
+              {saleEntries.map((entry, index) => (
+                <div key={entry.id} className="border border-slate-200 rounded-lg p-3 md:p-4 bg-slate-50">
+                  <div className="flex items-center justify-between mb-2 md:mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs md:text-sm font-medium text-slate-600">Item {index + 1}</span>
+                      <span className="text-xs text-slate-500">
+                        {entry.formData.item_name} - {entry.formData.p_grams}g
+                      </span>
+                    </div>
+                    <Button
+                      onClick={() => removeFromBatch(entry.id)}
+                      variant="outline"
+                      size="sm"
+                      className="border-red-300 text-red-600 hover:bg-red-50 h-7 w-7 p-0"
+                      disabled={isLoading}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 text-xs md:text-sm">
+                    <div>
+                      <span className="text-slate-600">Purchase:</span>
+                      <div className="font-semibold text-slate-800 text-sm md:text-base">{formatCurrency(entry.calculations.purchaseCost)}</div>
+                    </div>
+                    <div>
+                      <span className="text-slate-600">Selling:</span>
+                      <div className="font-semibold text-slate-800 text-sm md:text-base">{formatCurrency(entry.calculations.sellingCost)}</div>
+                    </div>
+                    <div>
+                      <span className="text-slate-600">Old Cost:</span>
+                      <div className="font-semibold text-slate-800 text-sm md:text-base">{formatCurrency(entry.calculations.oldCost)}</div>
+                    </div>
+                    <div>
+                      <span className="text-slate-600">Profit:</span>
+                      <div className={`font-semibold text-sm md:text-base ${entry.calculations.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(entry.calculations.profit)}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-2 text-xs text-slate-500">
+                    Customer: {entry.formData.customer_name} | Tag: {entry.formData.tag_no}
+                  </div>
+                </div>
+              ))}
+              
+              {/* Batch Totals */}
+              <div className="border-t border-slate-300 pt-3 md:pt-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 text-center">
+                  <div>
+                    <p className="text-xs md:text-sm text-slate-600">Total Purchase Cost</p>
+                    <p className="text-base md:text-lg font-bold text-slate-800">{formatCurrency(batchTotals.purchaseCost)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs md:text-sm text-slate-600">Total Selling Cost</p>
+                    <p className="text-base md:text-lg font-bold text-slate-800">{formatCurrency(batchTotals.sellingCost)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs md:text-sm text-slate-600">Total Old Cost</p>
+                    <p className="text-base md:text-lg font-bold text-slate-800">{formatCurrency(batchTotals.oldCost)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs md:text-sm text-slate-600">Total Profit</p>
+                    <p className={`text-base md:text-lg font-bold ${batchTotals.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(batchTotals.profit)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+            
+            {/* Complete Batch Button */}
+            <div className="p-3 md:p-4 bg-slate-100">
+              <Button
+                onClick={submitBatchSales}
+                className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold"
+                disabled={isLoading}
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {isLoading ? 'Completing Batch...' : `Complete All ${saleEntries.length} Sales`}
+              </Button>
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   );
