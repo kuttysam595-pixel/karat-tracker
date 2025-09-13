@@ -22,6 +22,7 @@ export const DailyRatesBanner = () => {
   const [rates, setRates] = useState<DailyRate[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editingRates, setEditingRates] = useState<DailyRate[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
   const { user } = useAuth();
 
   const defaultRates: DailyRate[] = [
@@ -76,6 +77,7 @@ export const DailyRatesBanner = () => {
       return;
     }
 
+    setIsSaving(true);
     try {
       const ratesToUpsert = editingRates.map(rate => ({
         inserted_by: user.username,
@@ -139,6 +141,8 @@ export const DailyRatesBanner = () => {
     } catch (error) {
       console.error('Error saving rates:', error);
       toast.error('Failed to save rates');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -200,14 +204,15 @@ export const DailyRatesBanner = () => {
               </Button>
             ) : (
               <div className="flex gap-2">
-                <Button
-                  onClick={handleSave}
-                  size="sm"
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  Save
-                </Button>
+                    <Button
+                      onClick={handleSave}
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      disabled={isSaving}
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      {isSaving ? 'Saving...' : 'Save'}
+                    </Button>
                 <Button
                   onClick={handleCancel}
                   size="sm"
