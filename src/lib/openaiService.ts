@@ -1,4 +1,5 @@
 import { TableSchema, schemaService } from './schemaService';
+import { DataMaskingService } from './dataMasking';
 
 interface QueryContext {
   tableName: string;
@@ -53,7 +54,7 @@ export class OpenAIService {
           messages: [
             {
               role: 'system',
-              content: 'You are a SQL expert who generates safe, read-only SQL queries based on natural language requests. Only generate SELECT statements. Never use DROP, DELETE, UPDATE, INSERT, or any destructive operations.'
+              content: 'You are a SQL expert who generates safe, read-only SQL queries based on natural language requests. Only generate SELECT statements. Never use DROP, DELETE, UPDATE, INSERT, or any destructive operations. IMPORTANT: You must respect customer privacy - never include actual customer names or phone numbers in examples, and focus on business analytics rather than individual customer details.'
             },
             {
               role: 'user',
@@ -142,8 +143,12 @@ export class OpenAIService {
       return "No data found matching your query criteria.";
     }
 
-    // Analyze the results to provide context
-    const resultSample = results.slice(0, 10);
+    // *** PRIVACY PROTECTION: Mask sensitive customer data before sending to LLM ***
+    const maskedResults = DataMaskingService.maskQueryResults(results);
+    const safeDataDescription = DataMaskingService.createSafeDataDescription(results);
+
+    // Use masked data for analysis
+    const resultSample = maskedResults.slice(0, 10);
     const resultColumns = Object.keys(results[0] || {});
     const resultCount = results.length;
 
@@ -154,15 +159,18 @@ export class OpenAIService {
 
     const prompt = `
 Based on the original user query: "${query}"
-Query returned ${resultCount} records with columns: ${resultColumns.join(', ')}
+${safeDataDescription}
 
-Sample results: ${JSON.stringify(resultSample, null, 2)}
+PRIVACY NOTE: Customer names and phone numbers have been masked in the data below for privacy protection.
+
+Sample results (with masked personal data): ${JSON.stringify(resultSample, null, 2)}
 
 Generate a very brief 2-line summary that:
 1. States the key finding in response to the user's question
 2. Uses Indian Rupee (₹) formatting for currency values
 3. Keep it under 50 words total
 4. Be direct and specific
+5. Do NOT include any customer names or phone numbers in your response
 
 ${hasAggregations ? 'Focus only on the main aggregated value and its business meaning.' : 'Mention the most important data point found.'}
 
@@ -207,7 +215,12 @@ Format: Line 1 = Main result, Line 2 = Brief business insight.
   }
 
   private buildPrompt(query: string, context: QueryContext): string {
-    const { dateRange } = context;
+    const { dateRange, sampleData } = context;
+
+    // *** PRIVACY PROTECTION: Mask sensitive data in sample data ***
+    const maskedSampleData = sampleData && sampleData.length > 0
+      ? DataMaskingService.maskSampleData(sampleData)
+      : [];
 
     // Analyze if the query mentions dates, time periods, or specific ranges
     const queryLower = query.toLowerCase();
@@ -218,6 +231,12 @@ Format: Line 1 = Main result, Line 2 = Brief business insight.
     let dateContext = '';
     if (hasDatesInQuery && dateRange) {
       dateContext = `- Available date range: ${dateRange.from} to ${dateRange.to}\n- Use this date range in your WHERE clauses when dates are mentioned\n`;
+    }
+
+    // Add sample data context if available (with masked sensitive data)
+    let sampleDataContext = '';
+    if (maskedSampleData.length > 0) {
+      sampleDataContext = `\nSample Data (with customer information masked for privacy):\n${JSON.stringify(maskedSampleData, null, 2)}\n`;
     }
 
     return `
@@ -245,7 +264,14 @@ BUSINESS RELATIONSHIPS:
 - All tables have date fields for temporal analysis
 
 Database Context:
-${dateContext}
+${dateContext}${sampleDataContext}
+
+PRIVACY & SECURITY REQUIREMENTS:
+⚠️  IMPORTANT: This system handles sensitive customer data. Follow these rules:
+- Customer names and phone numbers are masked in any sample data provided
+- NEVER include actual customer names or phone numbers in query examples
+- Use generic placeholders like 'customer_name' and 'customer_phone' in column references
+- Focus on business analytics rather than individual customer details
 
 Business Context:
 - This is a jewelry business tracking sales, expenses, and daily rates

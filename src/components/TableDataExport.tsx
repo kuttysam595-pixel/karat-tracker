@@ -7,12 +7,13 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Download, Database, Calendar, Filter, AlertCircle, ArrowLeft, Search, X, Mic, MessageSquare, Loader2, Sparkles, Square, Eye, EyeOff, Settings, CalendarIcon } from 'lucide-react';
+import { Download, Database, Calendar, Filter, AlertCircle, ArrowLeft, Search, X, Mic, MessageSquare, Loader2, Sparkles, Square, Eye, EyeOff, Settings, CalendarIcon, ChevronDown, ChevronUp, Code } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { openaiService } from '@/lib/openaiService';
 import { useAudioRecorder, isAudioRecordingSupported } from '@/hooks/useAudioRecorder';
+import { DataMaskingService } from '@/lib/dataMasking';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { format } from 'date-fns';
@@ -142,6 +143,7 @@ export const TableDataExport = () => {
   const [fromDateOpen, setFromDateOpen] = useState(false);
   const [toDateOpen, setToDateOpen] = useState(false);
   const [columnDatePopoverOpen, setColumnDatePopoverOpen] = useState<Record<string, boolean>>({});
+  const [showDeveloperInfo, setShowDeveloperInfo] = useState(false);
 
   // Audio recording hook
   const {
@@ -819,35 +821,35 @@ export const TableDataExport = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50">
-      {/* Header */}
+      {/* Mobile-Optimized Header */}
       <div className="bg-white/80 backdrop-blur-sm border-b border-amber-200 shadow-sm sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
             <Button
               variant="outline"
               size="sm"
               onClick={() => navigate('/dashboard')}
-              className="border-amber-300 text-amber-700 hover:bg-amber-100"
+              className="border-amber-300 text-amber-700 hover:bg-amber-100 w-full sm:w-auto"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Dashboard
             </Button>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
               <div className="p-2 bg-gradient-to-br from-amber-400 to-yellow-500 rounded-full">
-                <Database className="h-6 w-6 text-white" />
+                <Database className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
-              <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-amber-600 to-yellow-600 bg-clip-text text-transparent">
+              <div className="flex-1 sm:flex-none">
+                <h1 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-amber-600 to-yellow-600 bg-clip-text text-transparent">
                   Data Export & AI Query
                 </h1>
-                <p className="text-xs text-slate-600">Advanced Analytics & Export Tools</p>
+                <p className="text-xs text-slate-600 hidden sm:block">Advanced Analytics & Export Tools</p>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
       {/* AI Query Section - Special Gradient for AI Features */}
       <Card className="border-0 bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 shadow-lg relative overflow-hidden">
@@ -1027,6 +1029,18 @@ export const TableDataExport = () => {
               </AlertDescription>
             </Alert>
           )}
+
+          {/* Privacy Protection Notice */}
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-green-600">🛡️</span>
+              <span className="text-sm font-medium text-green-900">Privacy Protection Enabled</span>
+            </div>
+            <p className="text-sm text-gray-700">
+              Customer names and phone numbers are automatically masked before sending data to AI services to protect customer privacy.
+              All sensitive information remains secure and private.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -1053,44 +1067,102 @@ export const TableDataExport = () => {
               </div>
             )}
 
-            {/* SQL Query Display */}
-            {sqlQuery && (
-              <div className="bg-gray-50 border rounded-lg p-4">
-                <h4 className="font-medium text-gray-900 mb-2">Generated SQL Query</h4>
-                <code className="text-sm bg-gray-100 p-2 rounded block overflow-x-auto">
-                  {sqlQuery}
-                </code>
-                {queryExplanation && (
-                  <p className="text-gray-600 text-sm mt-2">{queryExplanation}</p>
+            {/* Results Table */}
+            {queryResults.length > 0 && (
+              <div className="space-y-4">
+                {/* Privacy Notice for AI Results */}
+                {DataMaskingService.getSafeDataSummary(queryResults).hasSensitiveData && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm font-medium text-blue-900">Privacy Protection Active</span>
+                    </div>
+                    <p className="text-sm text-blue-800 mt-1">
+                      Customer names and phone numbers are masked in the results below to protect privacy.
+                    </p>
+                  </div>
                 )}
+
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {Object.keys(queryResults[0]).map((column) => (
+                          <TableHead key={column} className="bg-gray-50 font-semibold">
+                            {column.replace(/_/g, ' ').toUpperCase()}
+                            {DataMaskingService.isSensitiveField(column) && (
+                              <span className="ml-1 text-xs text-blue-600" title="This field contains masked data for privacy">
+                                🔒
+                              </span>
+                            )}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {DataMaskingService.maskQueryResults(queryResults).map((row, index) => (
+                        <TableRow key={index}>
+                          {Object.entries(row).map(([column, value]) => (
+                            <TableCell key={`${index}-${column}`}>
+                              {formatCellValue(value, column)}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             )}
 
-            {/* Results Table */}
-            {queryResults.length > 0 && (
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {Object.keys(queryResults[0]).map((column) => (
-                        <TableHead key={column} className="bg-gray-50 font-semibold">
-                          {column.replace(/_/g, ' ').toUpperCase()}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {queryResults.map((row, index) => (
-                      <TableRow key={index}>
-                        {Object.entries(row).map(([column, value]) => (
-                          <TableCell key={`${index}-${column}`}>
-                            {formatCellValue(value, column)}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+            {/* Developer Information Section - Collapsible */}
+            {(sqlQuery || queryExplanation) && (
+              <div className="border-t pt-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowDeveloperInfo(!showDeveloperInfo)}
+                  className="w-full justify-between text-gray-600 hover:text-gray-800"
+                >
+                  <div className="flex items-center gap-2">
+                    <Code className="w-4 h-4" />
+                    <span className="text-sm font-medium">Developer Information</span>
+                    <span className="text-xs bg-gray-100 px-2 py-1 rounded">Testing Only</span>
+                  </div>
+                  {showDeveloperInfo ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                </Button>
+
+                {showDeveloperInfo && (
+                  <div className="mt-3 space-y-3">
+                    {/* SQL Query Display */}
+                    {sqlQuery && (
+                      <div className="bg-gray-50 border rounded-lg p-4">
+                        <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
+                          <Code className="w-4 h-4" />
+                          Generated SQL Query
+                        </h4>
+                        <code className="text-sm bg-gray-100 p-2 rounded block overflow-x-auto whitespace-pre-wrap">
+                          {sqlQuery}
+                        </code>
+                        {queryExplanation && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <h5 className="font-medium text-gray-800 mb-1">Explanation:</h5>
+                            <p className="text-gray-600 text-sm">{queryExplanation}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="text-xs text-gray-500 bg-yellow-50 border border-yellow-200 rounded p-2">
+                      ⚠️ <strong>Note:</strong> This section is for development and testing purposes only.
+                      It shows the generated SQL query and technical details that are not needed for end users.
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
