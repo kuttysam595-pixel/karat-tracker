@@ -7,12 +7,15 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Download, Database, Calendar, Filter, AlertCircle, ArrowLeft, Search, X, Mic, MessageSquare, Loader2, Sparkles, Square, Eye, EyeOff, Settings } from 'lucide-react';
+import { Download, Database, Calendar, Filter, AlertCircle, ArrowLeft, Search, X, Mic, MessageSquare, Loader2, Sparkles, Square, Eye, EyeOff, Settings, CalendarIcon } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { openaiService } from '@/lib/openaiService';
 import { useAudioRecorder, isAudioRecordingSupported } from '@/hooks/useAudioRecorder';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { format } from 'date-fns';
 
 interface TableData {
   [key: string]: any;
@@ -136,6 +139,9 @@ export const TableDataExport = () => {
   const [querySummary, setQuerySummary] = useState('');
   const [showQueryResults, setShowQueryResults] = useState(false);
   const [lastRecordedAudio, setLastRecordedAudio] = useState<Blob | null>(null);
+  const [fromDateOpen, setFromDateOpen] = useState(false);
+  const [toDateOpen, setToDateOpen] = useState(false);
+  const [columnDatePopoverOpen, setColumnDatePopoverOpen] = useState<Record<string, boolean>>({});
 
   // Audio recording hook
   const {
@@ -188,13 +194,79 @@ export const TableDataExport = () => {
 
   // Filtered data based on column filters
   const filteredData = useMemo(() => {
-    if (Object.keys(columnFilters).length === 0) return tableData;
+    let filtered = [...tableData];
 
-    return tableData.filter(row => {
+    // Apply date filtering if dates are set
+    if (fromDate || toDate) {
+      filtered = filtered.filter(row => {
+        const dateColumn = selectedTable === 'users' ? 'created_at' : 'asof_date';
+        const rowDate = row[dateColumn];
+
+        if (!rowDate) return false;
+
+        const date = new Date(rowDate);
+        const fromDateObj = fromDate ? new Date(fromDate) : null;
+        const toDateObj = toDate ? new Date(toDate) : null;
+
+        if (fromDateObj && date < fromDateObj) return false;
+        if (toDateObj && date > toDateObj) return false;
+
+        return true;
+      });
+    }
+
+    // Apply column filters
+    if (Object.keys(columnFilters).length === 0) return filtered;
+
+    return filtered.filter(row => {
       return Object.entries(columnFilters).every(([column, filterValue]) => {
         if (!filterValue.trim()) return true;
 
-        const cellValue = String(row[column] || '').toLowerCase();
+        const rawValue = row[column];
+
+        // Handle boolean columns (like udhaar)
+        if (column === 'udhaar' || typeof rawValue === 'boolean') {
+          const filterLower = filterValue.toLowerCase().trim();
+
+          // Convert boolean to yes/no for comparison
+          let booleanValue = '';
+          if (typeof rawValue === 'boolean') {
+            booleanValue = rawValue ? 'yes' : 'no';
+          } else if (rawValue === true || rawValue === 'true' || rawValue === 1 || rawValue === '1') {
+            booleanValue = 'yes';
+          } else if (rawValue === false || rawValue === 'false' || rawValue === 0 || rawValue === '0') {
+            booleanValue = 'no';
+          } else {
+            booleanValue = String(rawValue || '').toLowerCase();
+          }
+
+          // Check for yes/no matches
+          if (filterLower === 'yes' || filterLower === 'y') {
+            return booleanValue === 'yes' || booleanValue === 'true' || booleanValue === '1';
+          } else if (filterLower === 'no' || filterLower === 'n') {
+            return booleanValue === 'no' || booleanValue === 'false' || booleanValue === '0';
+          }
+
+          // Fallback to contains check
+          return booleanValue.includes(filterLower);
+        }
+
+        // Handle date columns
+        if (column.includes('date') || column.includes('time')) {
+          try {
+            const cellDate = new Date(rawValue);
+            const filterDate = new Date(filterValue);
+
+            if (!isNaN(cellDate.getTime()) && !isNaN(filterDate.getTime())) {
+              return cellDate.toDateString() === filterDate.toDateString();
+            }
+          } catch (e) {
+            // Fall through to text matching
+          }
+        }
+
+        // Regular text matching for other columns
+        const cellValue = String(rawValue || '').toLowerCase();
         const searchTerms = filterValue.toLowerCase().split(' ').filter(term => term.length > 0);
 
         // Check if all search terms are found in the cell value
@@ -213,7 +285,7 @@ export const TableDataExport = () => {
         });
       });
     });
-  }, [tableData, columnFilters]);
+  }, [tableData, columnFilters, fromDate, toDate, selectedTable]);
 
   // Calculate totals for numeric columns
   const totals = useMemo(() => {
@@ -787,23 +859,63 @@ export const TableDataExport = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="from-date">From Date</Label>
-              <Input
-                id="from-date"
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
+              <Label>From Date</Label>
+              <Popover open={fromDateOpen} onOpenChange={setFromDateOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {fromDate ? format(new Date(fromDate), "PPP") : "Pick a date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={fromDate ? new Date(fromDate) : undefined}
+                    onSelect={(date) => {
+                      if (date) {
+                        setFromDate(format(date, "yyyy-MM-dd"));
+                      } else {
+                        setFromDate('');
+                      }
+                      setFromDateOpen(false);
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="to-date">To Date</Label>
-              <Input
-                id="to-date"
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
+              <Label>To Date</Label>
+              <Popover open={toDateOpen} onOpenChange={setToDateOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {toDate ? format(new Date(toDate), "PPP") : "Pick a date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={toDate ? new Date(toDate) : undefined}
+                    onSelect={(date) => {
+                      if (date) {
+                        setToDate(format(date, "yyyy-MM-dd"));
+                      } else {
+                        setToDate('');
+                      }
+                      setToDateOpen(false);
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
 
             <div className="flex items-end space-x-2">
@@ -1139,17 +1251,71 @@ export const TableDataExport = () => {
 
             {/* Column Filters */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-4">
-              {visibleColumns.slice(0, 6).map((column) => (
-                <div key={column} className="space-y-1">
-                  <Label className="text-xs">{getColumnDisplayName(column)}</Label>
-                  <Input
-                    placeholder={`Filter ${getColumnDisplayName(column)}`}
-                    value={columnFilters[column] || ''}
-                    onChange={(e) => handleFilterChange(column, e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-              ))}
+              {visibleColumns.slice(0, 6).map((column) => {
+                const isDateColumn = column.includes('date') || column.includes('time');
+
+                return (
+                  <div key={column} className="space-y-1">
+                    <Label className="text-xs">{getColumnDisplayName(column)}</Label>
+                    {isDateColumn ? (
+                      <Popover
+                        open={columnDatePopoverOpen[column] || false}
+                        onOpenChange={(open) => setColumnDatePopoverOpen(prev => ({ ...prev, [column]: open }))}
+                      >
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal h-8 text-xs"
+                          >
+                            <CalendarIcon className="mr-1 h-3 w-3" />
+                            {columnFilters[column] ?
+                              format(new Date(columnFilters[column]), "MMM dd") :
+                              `Filter Date`
+                            }
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={columnFilters[column] ? new Date(columnFilters[column]) : undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                handleFilterChange(column, format(date, "yyyy-MM-dd"));
+                              } else {
+                                handleFilterChange(column, '');
+                              }
+                              setColumnDatePopoverOpen(prev => ({ ...prev, [column]: false }));
+                            }}
+                            initialFocus
+                          />
+                          {columnFilters[column] && (
+                            <div className="p-2 border-t">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full"
+                                onClick={() => {
+                                  handleFilterChange(column, '');
+                                  setColumnDatePopoverOpen(prev => ({ ...prev, [column]: false }));
+                                }}
+                              >
+                                Clear Filter
+                              </Button>
+                            </div>
+                          )}
+                        </PopoverContent>
+                      </Popover>
+                    ) : (
+                      <Input
+                        placeholder={`Filter ${getColumnDisplayName(column)}`}
+                        value={columnFilters[column] || ''}
+                        onChange={(e) => handleFilterChange(column, e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <div className="border rounded-lg overflow-hidden">
