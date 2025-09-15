@@ -804,152 +804,72 @@ export const TableDataExport = () => {
 
   if (!hasAccess) {
     return (
-      <div className="container mx-auto py-8">
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            You don't have permission to access this feature. Only admins and owners can export data.
-          </AlertDescription>
-        </Alert>
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50 flex items-center justify-center">
+        <div className="max-w-md mx-auto">
+          <Alert className="border-0 bg-white/90 backdrop-blur-sm shadow-lg">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-slate-700">
+              You don't have permission to access this feature. Only admins and owners can export data.
+            </AlertDescription>
+          </Alert>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-8 space-y-6">
-      <div className="flex items-center gap-4">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => navigate('/dashboard')}
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Dashboard
-        </Button>
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Database className="w-8 h-8" />
-          Data Export & AI Query
-        </h1>
-      </div>
-
-      {/* Table Selection and Date Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="w-5 h-5" />
-            Data Selection
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="table-select">Select Table</Label>
-              <Select value={selectedTable} onValueChange={(value: TableName) => setSelectedTable(value)}>
-                <SelectTrigger id="table-select">
-                  <SelectValue placeholder="Choose a table" />
-                </SelectTrigger>
-                <SelectContent>
-                  {AVAILABLE_TABLES.map((table) => (
-                    <SelectItem key={table.value} value={table.value}>
-                      {table.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>From Date</Label>
-              <Popover open={fromDateOpen} onOpenChange={setFromDateOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {fromDate ? format(new Date(fromDate), "PPP") : "Pick a date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <CalendarComponent
-                    mode="single"
-                    selected={fromDate ? new Date(fromDate) : undefined}
-                    onSelect={(date) => {
-                      if (date) {
-                        setFromDate(format(date, "yyyy-MM-dd"));
-                      } else {
-                        setFromDate('');
-                      }
-                      setFromDateOpen(false);
-                    }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="space-y-2">
-              <Label>To Date</Label>
-              <Popover open={toDateOpen} onOpenChange={setToDateOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {toDate ? format(new Date(toDate), "PPP") : "Pick a date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <CalendarComponent
-                    mode="single"
-                    selected={toDate ? new Date(toDate) : undefined}
-                    onSelect={(date) => {
-                      if (date) {
-                        setToDate(format(date, "yyyy-MM-dd"));
-                      } else {
-                        setToDate('');
-                      }
-                      setToDateOpen(false);
-                    }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="flex items-end space-x-2">
-              <Button
-                onClick={fetchTableData}
-                disabled={!selectedTable || loading}
-                className="flex-1"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    <Calendar className="w-4 h-4 mr-2" />
-                    Load Data
-                  </>
-                )}
-              </Button>
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50">
+      {/* Header */}
+      <div className="bg-white/80 backdrop-blur-sm border-b border-amber-200 shadow-sm sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto px-4 py-4">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/dashboard')}
+              className="border-amber-300 text-amber-700 hover:bg-amber-100"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Dashboard
+            </Button>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-amber-400 to-yellow-500 rounded-full">
+                <Database className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-amber-600 to-yellow-600 bg-clip-text text-transparent">
+                  Data Export & AI Query
+                </h1>
+                <p className="text-xs text-slate-600">Advanced Analytics & Export Tools</p>
+              </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* AI Query Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5" />
-            AI Query Assistant
+      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+
+      {/* AI Query Section - Special Gradient for AI Features */}
+      <Card className="border-0 bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 shadow-lg relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-blue-500/10"></div>
+        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-400/20 to-blue-400/20 rounded-full blur-2xl"></div>
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-indigo-400/20 to-purple-400/20 rounded-full blur-xl"></div>
+        <CardHeader className="relative">
+          <CardTitle className="flex items-center gap-2 text-slate-800">
+            <div className="p-2 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent font-bold">
+              AI Query Assistant
+            </span>
+            <div className="ml-auto">
+              <span className="px-2 py-1 text-xs font-medium bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-full">
+                ✨ AI Powered
+              </span>
+            </div>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 relative">
           <div className="flex gap-2">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -1079,7 +999,7 @@ export const TableDataExport = () => {
             <Button
               onClick={processAIQuery}
               disabled={!searchQuery.trim() || isProcessingQuery}
-              className="whitespace-nowrap"
+              className="whitespace-nowrap bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-semibold shadow-lg"
             >
               {isProcessingQuery ? (
                 <>
@@ -1112,14 +1032,19 @@ export const TableDataExport = () => {
 
       {/* AI Query Results */}
       {showQueryResults && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5" />
-              AI Query Results
+        <Card className="border-0 bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 shadow-lg relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-indigo-500/5 to-blue-500/5"></div>
+          <CardHeader className="relative">
+            <CardTitle className="flex items-center gap-2 text-slate-800">
+              <div className="p-2 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent font-bold">
+                AI Query Results
+              </span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 relative">
             {/* Query Summary */}
             {querySummary && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -1172,13 +1097,123 @@ export const TableDataExport = () => {
         </Card>
       )}
 
+      
+      {/* Table Selection and Date Filters */}
+      <Card className="border-0 bg-white/90 backdrop-blur-sm shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-slate-800">
+            <Filter className="w-5 h-5 text-amber-600" />
+            Data Selection
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="table-select">Select Table</Label>
+              <Select value={selectedTable} onValueChange={(value: TableName) => setSelectedTable(value)}>
+                <SelectTrigger id="table-select">
+                  <SelectValue placeholder="Choose a table" />
+                </SelectTrigger>
+                <SelectContent>
+                  {AVAILABLE_TABLES.map((table) => (
+                    <SelectItem key={table.value} value={table.value}>
+                      {table.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>From Date</Label>
+              <Popover open={fromDateOpen} onOpenChange={setFromDateOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {fromDate ? format(new Date(fromDate), "PPP") : "Pick a date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={fromDate ? new Date(fromDate) : undefined}
+                    onSelect={(date) => {
+                      if (date) {
+                        setFromDate(format(date, "yyyy-MM-dd"));
+                      } else {
+                        setFromDate('');
+                      }
+                      setFromDateOpen(false);
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <Label>To Date</Label>
+              <Popover open={toDateOpen} onOpenChange={setToDateOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {toDate ? format(new Date(toDate), "PPP") : "Pick a date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={toDate ? new Date(toDate) : undefined}
+                    onSelect={(date) => {
+                      if (date) {
+                        setToDate(format(date, "yyyy-MM-dd"));
+                      } else {
+                        setToDate('');
+                      }
+                      setToDateOpen(false);
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="flex items-end space-x-2">
+              <Button
+                onClick={fetchTableData}
+                disabled={!selectedTable || loading}
+                className="flex-1 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-semibold shadow-lg"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Calendar className="w-4 h-4 mr-2" />
+                    Load Data
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Regular Table Display */}
       {tableData.length > 0 && (
-        <Card>
+        <Card className="border-0 bg-white/90 backdrop-blur-sm shadow-lg">
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
+            <CardTitle className="flex items-center justify-between text-slate-800">
               <span className="flex items-center gap-2">
-                <Database className="w-5 h-5" />
+                <Database className="w-5 h-5 text-amber-600" />
                 {selectedTable ? AVAILABLE_TABLES.find(t => t.value === selectedTable)?.label : 'Table Data'}
                 <span className="text-sm text-gray-500">({filteredData.length} records)</span>
               </span>
@@ -1191,7 +1226,12 @@ export const TableDataExport = () => {
                   <X className="w-4 h-4 mr-1" />
                   Clear Filters
                 </Button>
-                <Button variant="outline" size="sm" onClick={downloadCSV}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={downloadCSV}
+                  className="border-amber-300 text-amber-700 hover:bg-amber-100"
+                >
                   <Download className="w-4 h-4 mr-2" />
                   Download CSV
                 </Button>
@@ -1363,6 +1403,7 @@ export const TableDataExport = () => {
           </CardContent>
         </Card>
       )}
+      </div>
     </div>
   );
 };
