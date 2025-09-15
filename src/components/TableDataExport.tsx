@@ -25,7 +25,7 @@ interface TableData {
 type TableName = 'users' | 'daily_rates' | 'expense_log' | 'sales_log' | 'activity_log';
 
 const AVAILABLE_TABLES: { value: TableName; label: string }[] = [
-  { value: 'users', label: 'Users' },
+ /* { value: 'users', label: 'Users' }, */
   { value: 'daily_rates', label: 'Daily Rates' },
   { value: 'expense_log', label: 'Expense Log' },
   { value: 'sales_log', label: 'Sales Log' },
