@@ -21,8 +21,9 @@
 ### 💰 **Financial Management**
 - **Daily Rates Tracking** - Real-time gold/silver pricing (24k, 22k, 18k)
 - **Sales Transaction Management** - Comprehensive wholesale/retail tracking
+- **Advanced Old Material Calculation** - Bidirectional purity/cost calculations with auto-recalculation
 - **Expense Logging** - Direct/indirect expense categorization with Udhaar support
-- **Profit Analytics** - Automated profit calculations and reporting
+- **Profit Analytics** - Enhanced profit calculations including old material profit tracking
 
 ### 🤖 **AI-Powered Analytics**
 - **Natural Language Queries** - Ask questions in plain English
@@ -220,6 +221,50 @@ karat-tracker/
   profit: 18750.00
 }
 ```
+
+### 🔄 Advanced Old Material Cost Calculation
+
+**Revolutionary bidirectional calculation system for old jewelry exchanges**
+
+The system now features an advanced old material cost calculation that supports both purchase and sales scenarios with automatic recalculation:
+
+#### **Key Features:**
+- **Bidirectional Calculations** - Enter either purity or cost, system calculates the other
+- **Auto-Recalculation** - Values update when material type or grams change
+- **Separate Purchase & Sales** - Track old material purchase and sales with different purities
+- **Profit on Old** - Automatic calculation: `Old Sales Cost - Old Purchase Cost`
+- **Enhanced Profit Formula** - New formula: `(Selling Cost - Purchase Cost) + Profit on Old`
+
+#### **Calculation Flow:**
+```typescript
+// Old Material Calculation Structure
+{
+  o1_gram: 15.500,                    // Old material grams (shared)
+  o1_purity: 85.00,                   // Old purchase purity %
+  o2_purity: 90.00,                   // Old sales purity %
+
+  // Auto-calculated display fields (not stored in DB)
+  old_purchase_cost: 98750.00,        // o1_gram × (o1_purity/100) × old_price
+  old_sales_cost: 104625.00,          // o1_gram × (o2_purity/100) × old_price
+
+  // Final stored values
+  o_cost: 5875.00,                    // Profit on old (sales - purchase)
+  total_profit: 24625.00              // (s_cost - p_cost) + o_cost
+}
+```
+
+#### **Smart Input Behaviors:**
+- **Purity Entry** → Auto-calculates respective cost
+- **Cost Entry** → Auto-calculates respective purity
+- **Material Change** → Recalculates all old costs with new rates
+- **Gram Change** → Updates both purchase and sales costs
+- **Visual Feedback** → Shows calculated values with override capability
+
+#### **Database Optimization:**
+- `o2_gram` field deprecated (set to null)
+- Repurposed `o1_purity` for old purchase purity
+- Repurposed `o2_purity` for old sales purity
+- `o_cost` now stores profit on old materials
 
 ### 💰 Expense Tracking
 ```typescript

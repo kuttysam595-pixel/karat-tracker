@@ -76,7 +76,9 @@ export const AddSales = () => {
     o1_gram: '',
     o1_purity: '',
     o2_gram: '',
-    o2_purity: ''
+    o2_purity: '',
+    old_purchase_cost: '',
+    old_sales_cost: ''
   });
 
   useEffect(() => {
@@ -186,50 +188,96 @@ export const AddSales = () => {
     if (!sellingCostValue || !gramsValue || formData.material !== 'gold' || formData.type !== 'retail') {
       return 0;
     }
-    
+
     const sellingCost = parseFloat(sellingCostValue);
     const grams = parseFloat(gramsValue);
-    const rate = is18Karat ? 
-      getRateByMaterialAndKarat('gold', '18k') : 
+    const rate = is18Karat ?
+      getRateByMaterialAndKarat('gold', '18k') :
       getRateByMaterialAndKarat('gold', '22k');
-    
+
     if (!rate || rate.n_price === 0) return 0;
-    
+
     // Formula: wastage% = ((selling_cost / (grams * rate)) - 1) * 100
     const wastage = ((sellingCost / (grams * rate.n_price)) - 1) * 100;
     return wastage;
   };
 
+  const calculateOldPurchaseCost = () => {
+    if (!formData.o1_gram || !formData.o1_purity || !formData.material) return 0;
+
+    const grams = parseFloat(formData.o1_gram);
+    const purity = parseFloat(formData.o1_purity) / 100;
+
+    if (formData.material === 'gold') {
+      const rate = getRateByMaterialAndKarat('gold', '24k');
+      return rate ? rate.o_price * grams * purity : 0;
+    } else {
+      const rate = getRateByMaterialAndKarat('silver', '');
+      return rate ? rate.o_price * grams * purity : 0;
+    }
+  };
+
+  const calculateOldSalesCost = () => {
+    if (!formData.o1_gram || !formData.o2_purity || !formData.material) return 0;
+
+    const grams = parseFloat(formData.o1_gram);
+    const purity = parseFloat(formData.o2_purity) / 100;
+
+    if (formData.material === 'gold') {
+      const rate = getRateByMaterialAndKarat('gold', '24k');
+      return rate ? rate.o_price * grams * purity : 0;
+    } else {
+      const rate = getRateByMaterialAndKarat('silver', '');
+      return rate ? rate.o_price * grams * purity : 0;
+    }
+  };
+
+  const calculateOldPurchasePurityFromCost = (purchaseCostValue: string, gramsValue: string) => {
+    if (!purchaseCostValue || !gramsValue || !formData.material) return 0;
+
+    const purchaseCost = parseFloat(purchaseCostValue);
+    const grams = parseFloat(gramsValue);
+
+    let rate;
+    if (formData.material === 'gold') {
+      rate = getRateByMaterialAndKarat('gold', '24k');
+    } else {
+      rate = getRateByMaterialAndKarat('silver', '');
+    }
+
+    if (!rate || rate.o_price === 0 || grams === 0) return 0;
+
+    // Formula: purity = (purchase_cost / (grams * old_price)) * 100
+    const purity = (purchaseCost / (grams * rate.o_price)) * 100;
+    return purity;
+  };
+
+  const calculateOldSalesPurityFromCost = (salesCostValue: string, gramsValue: string) => {
+    if (!salesCostValue || !gramsValue || !formData.material) return 0;
+
+    const salesCost = parseFloat(salesCostValue);
+    const grams = parseFloat(gramsValue);
+
+    let rate;
+    if (formData.material === 'gold') {
+      rate = getRateByMaterialAndKarat('gold', '24k');
+    } else {
+      rate = getRateByMaterialAndKarat('silver', '');
+    }
+
+    if (!rate || rate.o_price === 0 || grams === 0) return 0;
+
+    // Formula: purity = (sales_cost / (grams * old_price)) * 100
+    const purity = (salesCost / (grams * rate.o_price)) * 100;
+    return purity;
+  };
+
   const calculateOldCost = () => {
-    let totalOldCost = 0;
-    
-    if (formData.o1_gram && formData.o1_purity) {
-      const grams = parseFloat(formData.o1_gram);
-      const purity = parseFloat(formData.o1_purity) / 100;
-      
-      if (formData.material === 'gold') {
-        const rate = getRateByMaterialAndKarat('gold', '24k');
-        totalOldCost += rate ? rate.o_price * grams * purity : 0;
-      } else {
-        const rate = getRateByMaterialAndKarat('silver', '');
-        totalOldCost += rate ? rate.o_price * grams * purity : 0;
-      }
-    }
-    
-    if (formData.o2_gram && formData.o2_purity) {
-      const grams = parseFloat(formData.o2_gram);
-      const purity = parseFloat(formData.o2_purity) / 100;
-      
-      if (formData.material === 'gold') {
-        const rate = getRateByMaterialAndKarat('gold', '24k');
-        totalOldCost += rate ? rate.o_price * grams * purity : 0;
-      } else {
-        const rate = getRateByMaterialAndKarat('silver', '');
-        totalOldCost += rate ? rate.o_price * grams * purity : 0;
-      }
-    }
-    
-    return totalOldCost;
+    // New logic: o_cost (Profit on Old) = Old Sales Cost - Old Purchase Cost
+    const oldSalesCost = calculateOldSalesCost();
+    const oldPurchaseCost = calculateOldPurchaseCost();
+
+    return oldSalesCost - oldPurchaseCost;
   };
 
   const calculateProfit = () => {
@@ -237,10 +285,10 @@ export const AddSales = () => {
     const purchaseCost = calculatePurchaseCost();
     const oldCost = calculateOldCost();
 
-  
+    // New formula: profit = (s_cost - p_cost) + o_cost
+    // Where o_cost is now the profit on old materials (sales - purchase)
     if (oldCost !== undefined && oldCost !== null) {
-      // Explicit formula with old cost
-       return (sellingCost - purchaseCost) - oldCost;
+      return (sellingCost - purchaseCost) + oldCost;
     } else {
       // Fallback formula without old cost
       return sellingCost - purchaseCost;
@@ -257,32 +305,138 @@ export const AddSales = () => {
       o1_gram: '',
       o1_purity: '',
       o2_gram: '',
-      o2_purity: ''
+      o2_purity: '',
+      old_purchase_cost: '',
+      old_sales_cost: ''
     }));
   };
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
-      
+
       // Reset cost calculated fields when transaction type changes
       if (field === 'type') {
         newData.s_purity = '';
         newData.wastage = '';
         newData.s_cost = '';
       }
-      
+
+      // Recalculate old costs when material changes
+      if (field === 'material' && value && newData.o1_gram) {
+        // Recalculate old purchase cost if o1_purity exists
+        if (newData.o1_purity) {
+          const grams = parseFloat(newData.o1_gram);
+          const purity = parseFloat(newData.o1_purity) / 100;
+          let rate;
+          if (value === 'gold') {
+            rate = getRateByMaterialAndKarat('gold', '24k');
+          } else {
+            rate = getRateByMaterialAndKarat('silver', '');
+          }
+          const calculatedCost = rate ? rate.o_price * grams * purity : 0;
+          newData.old_purchase_cost = calculatedCost > 0 ? calculatedCost.toFixed(2) : '';
+        }
+
+        // Recalculate old sales cost if o2_purity exists
+        if (newData.o2_purity) {
+          const grams = parseFloat(newData.o1_gram);
+          const purity = parseFloat(newData.o2_purity) / 100;
+          let rate;
+          if (value === 'gold') {
+            rate = getRateByMaterialAndKarat('gold', '24k');
+          } else {
+            rate = getRateByMaterialAndKarat('silver', '');
+          }
+          const calculatedCost = rate ? rate.o_price * grams * purity : 0;
+          newData.old_sales_cost = calculatedCost > 0 ? calculatedCost.toFixed(2) : '';
+        }
+      }
+
       // Auto-calculate selling cost when wastage changes (for gold retail)
       if (field === 'wastage' && newData.material === 'gold' && newData.type === 'retail' && value) {
         const calculatedCost = calculateSellingCostFromWastage(value, newData.p_grams);
         newData.s_cost = calculatedCost > 0 ? calculatedCost.toFixed(2) : '';
       }
-      
+
       // Clear selling cost when wastage is cleared
       if (field === 'wastage' && !value && newData.material === 'gold' && newData.type === 'retail') {
         newData.s_cost = '';
       }
-      
+
+      // Recalculate old costs when o1_gram changes
+      if (field === 'o1_gram' && value && newData.material) {
+        // Recalculate old purchase cost if o1_purity exists
+        if (newData.o1_purity) {
+          const grams = parseFloat(value);
+          const purity = parseFloat(newData.o1_purity) / 100;
+          let rate;
+          if (newData.material === 'gold') {
+            rate = getRateByMaterialAndKarat('gold', '24k');
+          } else {
+            rate = getRateByMaterialAndKarat('silver', '');
+          }
+          const calculatedCost = rate ? rate.o_price * grams * purity : 0;
+          newData.old_purchase_cost = calculatedCost > 0 ? calculatedCost.toFixed(2) : '';
+        }
+
+        // Recalculate old sales cost if o2_purity exists
+        if (newData.o2_purity) {
+          const grams = parseFloat(value);
+          const purity = parseFloat(newData.o2_purity) / 100;
+          let rate;
+          if (newData.material === 'gold') {
+            rate = getRateByMaterialAndKarat('gold', '24k');
+          } else {
+            rate = getRateByMaterialAndKarat('silver', '');
+          }
+          const calculatedCost = rate ? rate.o_price * grams * purity : 0;
+          newData.old_sales_cost = calculatedCost > 0 ? calculatedCost.toFixed(2) : '';
+        }
+      }
+
+      // Clear old costs when o1_gram is cleared
+      if (field === 'o1_gram' && !value) {
+        newData.old_purchase_cost = '';
+        newData.old_sales_cost = '';
+      }
+
+      // Auto-calculate old purchase cost when o1_purity changes
+      if (field === 'o1_purity' && value && newData.o1_gram && newData.material) {
+        const grams = parseFloat(newData.o1_gram);
+        const purity = parseFloat(value) / 100;
+        let rate;
+        if (newData.material === 'gold') {
+          rate = getRateByMaterialAndKarat('gold', '24k');
+        } else {
+          rate = getRateByMaterialAndKarat('silver', '');
+        }
+        const calculatedCost = rate ? rate.o_price * grams * purity : 0;
+        newData.old_purchase_cost = calculatedCost > 0 ? calculatedCost.toFixed(2) : '';
+      }
+
+      // Auto-calculate old sales cost when o2_purity changes
+      if (field === 'o2_purity' && value && newData.o1_gram && newData.material) {
+        const grams = parseFloat(newData.o1_gram);
+        const purity = parseFloat(value) / 100;
+        let rate;
+        if (newData.material === 'gold') {
+          rate = getRateByMaterialAndKarat('gold', '24k');
+        } else {
+          rate = getRateByMaterialAndKarat('silver', '');
+        }
+        const calculatedCost = rate ? rate.o_price * grams * purity : 0;
+        newData.old_sales_cost = calculatedCost > 0 ? calculatedCost.toFixed(2) : '';
+      }
+
+      // Clear old costs when purities are cleared
+      if (field === 'o1_purity' && !value) {
+        newData.old_purchase_cost = '';
+      }
+      if (field === 'o2_purity' && !value) {
+        newData.old_sales_cost = '';
+      }
+
       return newData;
     });
   };
@@ -290,13 +444,13 @@ export const AddSales = () => {
   const handleSellingCostChange = (value: string) => {
     setFormData(prev => {
       const newData = { ...prev, s_cost: value };
-      
+
       // Auto-calculate wastage when selling cost changes (for gold retail)
       if (newData.material === 'gold' && newData.type === 'retail' && value && newData.p_grams) {
         const calculatedWastage = calculateWastageFromSellingCost(value, newData.p_grams);
         newData.wastage = calculatedWastage.toFixed(2);
       }
-      
+
       // Clear wastage when selling cost is cleared
       if (!value && newData.material === 'gold' && newData.type === 'retail') {
         newData.wastage = '';
@@ -308,7 +462,45 @@ export const AddSales = () => {
         // No additional calculations needed (no wastage for silver)
         newData.s_cost = value;
       }
-      
+
+      return newData;
+    });
+  };
+
+  const handleOldPurchaseCostChange = (value: string) => {
+    setFormData(prev => {
+      const newData = { ...prev, old_purchase_cost: value };
+
+      // Auto-calculate o1_purity when old purchase cost changes
+      if (value && newData.o1_gram) {
+        const calculatedPurity = calculateOldPurchasePurityFromCost(value, newData.o1_gram);
+        newData.o1_purity = calculatedPurity > 0 ? calculatedPurity.toFixed(2) : '';
+      }
+
+      // Clear o1_purity when cost is cleared
+      if (!value) {
+        newData.o1_purity = '';
+      }
+
+      return newData;
+    });
+  };
+
+  const handleOldSalesCostChange = (value: string) => {
+    setFormData(prev => {
+      const newData = { ...prev, old_sales_cost: value };
+
+      // Auto-calculate o2_purity when old sales cost changes
+      if (value && newData.o1_gram) {
+        const calculatedPurity = calculateOldSalesPurityFromCost(value, newData.o1_gram);
+        newData.o2_purity = calculatedPurity > 0 ? calculatedPurity.toFixed(2) : '';
+      }
+
+      // Clear o2_purity when cost is cleared
+      if (!value) {
+        newData.o2_purity = '';
+      }
+
       return newData;
     });
   };
@@ -450,7 +642,9 @@ export const AddSales = () => {
       o1_gram: '',
       o1_purity: '',
       o2_gram: '',
-      o2_purity: ''
+      o2_purity: '',
+      old_purchase_cost: '',
+      old_sales_cost: ''
     }));
     
     // Reset component states that are item-specific
@@ -543,7 +737,7 @@ export const AddSales = () => {
         s_cost: sellingCost,
         o1_gram: formData.o1_gram ? parseFloat(formData.o1_gram) : null,
         o1_purity: formData.o1_purity ? parseFloat(formData.o1_purity) : null,
-        o2_gram: formData.o2_gram ? parseFloat(formData.o2_gram) : null,
+        o2_gram: null, // No longer used - set to null
         o2_purity: formData.o2_purity ? parseFloat(formData.o2_purity) : null,
         o_cost: oldCost,
         profit: profit
@@ -670,7 +864,7 @@ export const AddSales = () => {
         s_cost: entry.calculations.sellingCost,
         o1_gram: entry.formData.o1_gram ? parseFloat(entry.formData.o1_gram) : null,
         o1_purity: entry.formData.o1_purity ? parseFloat(entry.formData.o1_purity) : null,
-        o2_gram: entry.formData.o2_gram ? parseFloat(entry.formData.o2_gram) : null,
+        o2_gram: null, // No longer used - set to null
         o2_purity: entry.formData.o2_purity ? parseFloat(entry.formData.o2_purity) : null,
         o_cost: entry.calculations.oldCost,
         profit: entry.calculations.profit
@@ -1126,7 +1320,9 @@ export const AddSales = () => {
                           o1_gram: '',
                           o1_purity: '',
                           o2_gram: '',
-                          o2_purity: ''
+                          o2_purity: '',
+                          old_purchase_cost: '',
+                          old_sales_cost: ''
                         }));
                       }
                     }}
@@ -1140,9 +1336,9 @@ export const AddSales = () => {
             </CardHeader>
             {showOldMaterials && (
               <CardContent className="space-y-4 md:space-y-6 pt-0">
-                {/* Old Material 1 */}
+                {/* Old Material Details */}
                 <div>
-                  <h4 className="text-base md:text-lg font-medium text-slate-700 mb-3 md:mb-4">Old Material 1</h4>
+                  <h4 className="text-base md:text-lg font-medium text-slate-700 mb-3 md:mb-4">Old Material</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                     <div className="space-y-2">
                       <Label htmlFor="o1_gram" className="text-slate-700 font-medium">Old Grams</Label>
@@ -1157,8 +1353,14 @@ export const AddSales = () => {
                         disabled={isLoading || !canEnterSales}
                       />
                     </div>
+                  </div>
+                </div>
+
+                {/* Old Purchase Details */}
+                <div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                     <div className="space-y-2">
-                      <Label htmlFor="o1_purity" className="text-slate-700 font-medium">Old Purity (%)</Label>
+                      <Label htmlFor="o1_purity" className="text-slate-700 font-medium">Old Purchase Purity (%)</Label>
                       <Input
                         id="o1_purity"
                         type="number"
@@ -1170,28 +1372,32 @@ export const AddSales = () => {
                         disabled={isLoading || !canEnterSales}
                       />
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="old_purchase_cost" className="text-slate-700 font-medium">Old Purchase Cost</Label>
+                      <Input
+                        id="old_purchase_cost"
+                        type="number"
+                        step="0.01"
+                        placeholder={calculateOldPurchaseCost() > 0 ? calculateOldPurchaseCost().toFixed(2) : "0.00"}
+                        value={formData.old_purchase_cost || (calculateOldPurchaseCost() > 0 ? calculateOldPurchaseCost().toFixed(2) : "")}
+                        onChange={(e) => handleOldPurchaseCostChange(e.target.value)}
+                        className="border-slate-300 focus:border-green-400 focus:ring-green-400 text-lg font-semibold"
+                        disabled={isLoading || !canEnterSales}
+                      />
+                      {(!formData.old_purchase_cost || formData.old_purchase_cost === "") && calculateOldPurchaseCost() > 0 && (
+                        <p className="text-sm text-slate-600">
+                          Calculated: {formatCurrency(calculateOldPurchaseCost())} - You can override this value
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Old Material 2 */}
+                {/* Old Sales Details */}
                 <div>
-                  <h4 className="text-base md:text-lg font-medium text-slate-700 mb-3 md:mb-4">Old Material 2</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                     <div className="space-y-2">
-                      <Label htmlFor="o2_gram" className="text-slate-700 font-medium">Old Grams</Label>
-                      <Input
-                        id="o2_gram"
-                        type="number"
-                        step="0.001"
-                        placeholder="0.000"
-                        value={formData.o2_gram}
-                        onChange={(e) => handleInputChange('o2_gram', e.target.value)}
-                        className="border-slate-300 focus:border-green-400 focus:ring-green-400"
-                        disabled={isLoading || !canEnterSales}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="o2_purity" className="text-slate-700 font-medium">Old Purity (%)</Label>
+                      <Label htmlFor="o2_purity" className="text-slate-700 font-medium">Old Sales Purity (%)</Label>
                       <Input
                         id="o2_purity"
                         type="number"
@@ -1203,11 +1409,29 @@ export const AddSales = () => {
                         disabled={isLoading || !canEnterSales}
                       />
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="old_sales_cost" className="text-slate-700 font-medium">Old Sales Cost</Label>
+                      <Input
+                        id="old_sales_cost"
+                        type="number"
+                        step="0.01"
+                        placeholder={calculateOldSalesCost() > 0 ? calculateOldSalesCost().toFixed(2) : "0.00"}
+                        value={formData.old_sales_cost || (calculateOldSalesCost() > 0 ? calculateOldSalesCost().toFixed(2) : "")}
+                        onChange={(e) => handleOldSalesCostChange(e.target.value)}
+                        className="border-slate-300 focus:border-green-400 focus:ring-green-400 text-lg font-semibold"
+                        disabled={isLoading || !canEnterSales}
+                      />
+                      {(!formData.old_sales_cost || formData.old_sales_cost === "") && calculateOldSalesCost() > 0 && (
+                        <p className="text-sm text-slate-600">
+                          Calculated: {formatCurrency(calculateOldSalesCost())} - You can override this value
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-slate-700 font-medium">Total Old Cost (Calculated)</Label>
+                  <Label className="text-slate-700 font-medium">Profit on Old (Calculated)</Label>
                   <div className="p-3 bg-slate-100 rounded-md text-lg font-semibold text-slate-800">
                     {formatCurrency(calculateOldCost())}
                   </div>
@@ -1232,7 +1456,7 @@ export const AddSales = () => {
                   <p className="text-lg font-bold text-slate-800">{formatCurrency(calculateSellingCost())}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-slate-600">Old Cost</p>
+                  <p className="text-sm text-slate-600">Profit on Old</p>
                   <p className="text-lg font-bold text-slate-800">{formatCurrency(calculateOldCost())}</p>
                 </div>
                 <div>
@@ -1328,7 +1552,7 @@ export const AddSales = () => {
                       <div className="font-semibold text-slate-800 text-sm md:text-base">{formatCurrency(entry.calculations.sellingCost)}</div>
                     </div>
                     <div>
-                      <span className="text-slate-600">Old Cost:</span>
+                      <span className="text-slate-600">Profit on Old:</span>
                       <div className="font-semibold text-slate-800 text-sm md:text-base">{formatCurrency(entry.calculations.oldCost)}</div>
                     </div>
                     <div>
@@ -1357,7 +1581,7 @@ export const AddSales = () => {
                     <p className="text-base md:text-lg font-bold text-slate-800">{formatCurrency(batchTotals.sellingCost)}</p>
                   </div>
                   <div>
-                    <p className="text-xs md:text-sm text-slate-600">Total Old Cost</p>
+                    <p className="text-xs md:text-sm text-slate-600">Total Profit on Old</p>
                     <p className="text-base md:text-lg font-bold text-slate-800">{formatCurrency(batchTotals.oldCost)}</p>
                   </div>
                   <div>
