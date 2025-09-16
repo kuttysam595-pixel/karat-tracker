@@ -117,6 +117,22 @@ const COLUMNS_TO_TOTAL: Record<string, string[]> = {
   activity_log: [],
 };
 
+// Helper function to get the appropriate sort column for each table
+const getSortColumn = (tableName: string): string => {
+  switch (tableName) {
+    case 'users':
+      return 'created_at';
+    case 'activity_log':
+      return 'timestamp';
+    case 'daily_rates':
+    case 'expense_log':
+    case 'sales_log':
+      return 'asof_date';
+    default:
+      return 'asof_date';
+  }
+};
+
 export const TableDataExport = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -197,6 +213,14 @@ export const TableDataExport = () => {
   // Filtered data based on column filters
   const filteredData = useMemo(() => {
     let filtered = [...tableData];
+
+    // Sort by appropriate date column (newest first)
+    const sortColumn = getSortColumn(selectedTable || '');
+    filtered.sort((a, b) => {
+      const dateA = new Date(a[sortColumn] || 0);
+      const dateB = new Date(b[sortColumn] || 0);
+      return dateB.getTime() - dateA.getTime();
+    });
 
     // Apply date filtering if dates are set
     if (fromDate || toDate) {
@@ -318,7 +342,10 @@ export const TableDataExport = () => {
         query = query.gte(dateColumn, fromDate).lte(dateColumn, toDate);
       }
 
-      const { data, error } = await query.order('id', { ascending: false }).limit(1000);
+      // Determine the appropriate date column for sorting
+      const sortColumn = getSortColumn(selectedTable);
+
+      const { data, error } = await query.order(sortColumn, { ascending: false }).limit(1000);
 
       if (error) {
         console.error('Error fetching data:', error);
@@ -468,8 +495,18 @@ export const TableDataExport = () => {
       return;
     }
 
+    // Sort data by appropriate date column before export
+    const sortColumn = getSortColumn(selectedTable || '');
+
+    // Sort filtered data by date column (newest first)
+    const sortedData = [...filteredData].sort((a, b) => {
+      const dateA = new Date(a[sortColumn] || 0);
+      const dateB = new Date(b[sortColumn] || 0);
+      return dateB.getTime() - dateA.getTime();
+    });
+
     const headers = visibleColumns.map(col => getColumnDisplayName(col)).join(',');
-    const rows = filteredData.map(row =>
+    const rows = sortedData.map(row =>
       visibleColumns.map(col => {
         const formattedValue = formatCSVValue(row[col], col);
         // Escape commas and quotes in CSV

@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, ShoppingCart, Save, Calculator, Plus, Trash2, Package } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Save, Calculator, Plus, Trash2, Package, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -58,6 +58,7 @@ export const AddSales = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [batchMode, setBatchMode] = useState(false);
   const [saleEntries, setSaleEntries] = useState<SaleEntry[]>([]);
+  const [basicInfoLocked, setBasicInfoLocked] = useState(false);
 
   const [formData, setFormData] = useState({
     asof_date: format(new Date(), 'yyyy-MM-dd'),
@@ -235,10 +236,11 @@ export const AddSales = () => {
     const sellingCost = calculateSellingCost();
     const purchaseCost = calculatePurchaseCost();
     const oldCost = calculateOldCost();
+
   
     if (oldCost !== undefined && oldCost !== null) {
       // Explicit formula with old cost
-      return (sellingCost - oldCost) - (purchaseCost - oldCost);
+       return (sellingCost - purchaseCost) - oldCost;
     } else {
       // Fallback formula without old cost
       return sellingCost - purchaseCost;
@@ -380,10 +382,19 @@ export const AddSales = () => {
   };
 
   const addToBatch = () => {
-    // Validate required fields
+    // Validate basic mandatory information first
+    const basicInfoFields = ['asof_date', 'material', 'type', 'customer_name'];
+    const missingBasicInfo = basicInfoFields.filter(field => !formData[field as keyof typeof formData]);
+
+    if (missingBasicInfo.length > 0) {
+      toast.error('Please fill all basic information (Date, Material, Type, Customer Name) before adding to batch');
+      return;
+    }
+
+    // Validate all required fields
     const requiredFields = ['material', 'type', 'item_name', 'tag_no', 'customer_name', 'p_grams', 'p_purity'];
     const missingFields = requiredFields.filter(field => !formData[field as keyof typeof formData]);
-    
+
     if (missingFields.length > 0) {
       toast.error('Please fill all required fields before adding to batch');
       return;
@@ -401,8 +412,9 @@ export const AddSales = () => {
       return;
     }
 
-    // Enable batch mode when first item is added
+    // Enable batch mode and lock basic info when first item is added
     setBatchMode(true);
+    setBasicInfoLocked(true);
 
     const newEntry: SaleEntry = {
       id: Date.now().toString(),
@@ -450,11 +462,21 @@ export const AddSales = () => {
 
   const clearBatch = () => {
     setSaleEntries([]);
+    setBatchMode(false);
+    setBasicInfoLocked(false);
     toast.success('Batch cleared');
   };
 
   const removeFromBatch = (entryId: string) => {
-    setSaleEntries(prev => prev.filter(entry => entry.id !== entryId));
+    setSaleEntries(prev => {
+      const newEntries = prev.filter(entry => entry.id !== entryId);
+      // If this was the last item, unlock basic info
+      if (newEntries.length === 0) {
+        setBatchMode(false);
+        setBasicInfoLocked(false);
+      }
+      return newEntries;
+    });
     toast.success('Item removed from batch');
   };
 
@@ -569,10 +591,11 @@ export const AddSales = () => {
         o2_gram: '',
         o2_purity: ''
       }));
-      
+
       setShowOldMaterials(false);
       setIs18Karat(false);
       setBatchMode(false);
+      setBasicInfoLocked(false);
 
     } catch (error) {
       console.error('Error adding batch sales:', error);
@@ -675,7 +698,7 @@ export const AddSales = () => {
       }
 
       toast.success(`${saleEntries.length} sales recorded successfully!`);
-      
+
       // Clear batch and form
       setSaleEntries([]);
       setFormData(prev => ({
@@ -696,10 +719,11 @@ export const AddSales = () => {
         o2_gram: '',
         o2_purity: ''
       }));
-      
+
       setShowOldMaterials(false);
       setIs18Karat(false);
       setBatchMode(false);
+      setBasicInfoLocked(false);
 
     } catch (error) {
       console.error('Error adding batch sales:', error);
@@ -776,7 +800,18 @@ export const AddSales = () => {
 
         <form onSubmit={handleSubmit} className="space-y-3 md:space-y-6">
           {/* Basic Information */}
-          <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
+          <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm relative">
+            {basicInfoLocked && (
+              <div className="absolute inset-0 bg-slate-300/50 backdrop-blur-sm rounded-lg z-10 flex items-center justify-center">
+                <div className="bg-white/90 px-4 py-3 rounded-lg shadow-lg border border-slate-200 flex items-center gap-3">
+                  <Lock className="h-5 w-5 text-red-500" />
+                  <div>
+                    <div className="font-medium text-slate-800">Basic Information Locked</div>
+                    <div className="text-sm text-slate-600">Complete or clear batch to edit</div>
+                  </div>
+                </div>
+              </div>
+            )}
             <CardHeader className="pb-3 md:pb-6">
               <CardTitle className="text-lg md:text-xl text-slate-800 flex items-center gap-2">
                 <Calculator className="h-4 w-4 md:h-5 md:w-5" />
@@ -798,7 +833,7 @@ export const AddSales = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="material" className="text-slate-700 font-medium">Material *</Label>
-                  <Select value={formData.material} onValueChange={(value) => handleInputChange('material', value)}>
+                  <Select value={formData.material} onValueChange={(value) => handleInputChange('material', value)} disabled={isLoading}>
                     <SelectTrigger className="border-slate-300 focus:border-green-400 focus:ring-green-400">
                       <SelectValue placeholder="Select material" />
                     </SelectTrigger>
@@ -810,7 +845,7 @@ export const AddSales = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="type" className="text-slate-700 font-medium">Transaction Type *</Label>
-                  <Select value={formData.type} onValueChange={(value) => handleInputChange('type', value)}>
+                  <Select value={formData.type} onValueChange={(value) => handleInputChange('type', value)} disabled={isLoading}>
                     <SelectTrigger className="border-slate-300 focus:border-green-400 focus:ring-green-400">
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
