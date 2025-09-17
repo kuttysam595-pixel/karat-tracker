@@ -1,12 +1,12 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Receipt, Save } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -16,16 +16,185 @@ import { logActivityWithContext } from '@/lib/activityLogger';
 export const AddExpense = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const isEditMode = searchParams.get('edit') === 'true';
+  const editId = searchParams.get('id');
+
   const [formData, setFormData] = useState({
     asof_date: format(new Date(), 'yyyy-MM-dd'),
     expense_type: '',
     item_name: '',
     cost: '',
-    udhaar: false
+    is_credit: false
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [originalData, setOriginalData] = useState<any>(null);
+
+  useEffect(() => {
+    if (isEditMode && editId) {
+      fetchExpenseRecord();
+    }
+  }, [isEditMode, editId]);
+
+  const fetchExpenseRecord = async () => {
+    if (!editId) {
+      console.log('No editId provided');
+      return;
+    }
+
+    console.log('fetchExpenseRecord called with editId:', editId, 'Type:', typeof editId);
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('expense_log')
+        .select('*')
+        .eq('id', editId)
+        .single();
+
+      console.log('Initial fetch result:', { data, error });
+
+      if (error) {
+        console.error('Error fetching expense record:', error);
+        toast.error('Failed to fetch expense record');
+        navigate('/table-export');
+        return;
+      }
+
+      if (data) {
+        setOriginalData(data);
+
+        // Pre-populate form with existing data
+        setFormData({
+          asof_date: data.asof_date,
+          expense_type: data.expense_type,
+          item_name: data.item_name,
+          cost: data.cost?.toString() || '',
+          is_credit: data.is_credit || false
+        });
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('An unexpected error occurred');
+      navigate('/table-export');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const updateExpenseRecord = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!user) {
+      toast.error('User not authenticated');
+      return;
+    }
+
+    if (!editId || !originalData) {
+      toast.error('Original expense data not found');
+      return;
+    }
+
+    if (!formData.asof_date || !formData.expense_type || !formData.item_name || !formData.cost) {
+      toast.error('Please fill all fields');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      console.log('Updating expense record with ID:', editId, 'Type:', typeof editId);
+
+      // Check for duplicate expense entry (excluding current record)
+      const duplicateEntry = await checkDuplicateExpense(
+        formData.asof_date,
+        formData.expense_type,
+        formData.item_name,
+        editId
+      );
+
+      if (duplicateEntry) {
+        toast.error(`Duplicate expense detected! This expense (${formData.expense_type} - ${formData.item_name}) for today was already entered by ${duplicateEntry.inserted_by}.`);
+        return;
+      }
+
+      const expenseData = {
+        asof_date: formData.asof_date,
+        expense_type: formData.expense_type,
+        item_name: formData.item_name,
+        cost: parseFloat(formData.cost),
+        is_credit: formData.is_credit
+      };
+
+      // First check if the record exists
+      console.log('Checking if record exists with ID:', editId);
+      const { data: existingRecord, error: checkError } = await supabase
+        .from('expense_log')
+        .select('*')
+        .eq('id', editId)
+        .single();
+
+      console.log('Existence check result:', { existingRecord, checkError });
+
+      if (checkError || !existingRecord) {
+        console.error('Record not found for ID:', editId, 'Error:', checkError);
+        throw new Error(`Expense record with ID ${editId} not found`);
+      }
+
+      console.log('Record exists, proceeding with update for ID:', editId);
+      console.log('Update data:', expenseData);
+
+      const { data, error } = await supabase
+        .from('expense_log')
+        .update(expenseData)
+        .eq('id', editId)
+        .select();
+
+      console.log('Update result:', { data, error });
+
+      if (error) {
+        console.error('Update error:', error);
+        throw error;
+      }
+
+      if (!data || data.length === 0) {
+        console.error('No data returned from update. Data:', data);
+        throw new Error('Record not found or could not be updated');
+      }
+
+      const updatedRecord = data[0];
+
+      // Log the activity manually
+      await logActivityWithContext(
+        user.username,
+        'expense_log',
+        'UPDATE',
+        updatedRecord.id,
+        originalData,
+        updatedRecord
+      );
+
+      toast.success('Expense updated successfully!');
+      navigate('/table-export');
+
+    } catch (error) {
+      console.error('Error updating expense:', error);
+      toast.error('Failed to update expense');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
+    // If in edit mode, update the record
+    if (isEditMode) {
+      updateExpenseRecord(e);
+      return;
+    }
+
+    // Otherwise, create new expense
+    submitNewExpense(e);
+  };
+
+  const submitNewExpense = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!user) {
@@ -59,7 +228,7 @@ export const AddExpense = () => {
         expense_type: formData.expense_type,
         item_name: formData.item_name,
         cost: parseFloat(formData.cost),
-        udhaar: formData.udhaar
+        is_credit: formData.is_credit
       };
 
       const { data, error } = await supabase
@@ -90,7 +259,7 @@ export const AddExpense = () => {
         expense_type: '',
         item_name: '',
         cost: '',
-        udhaar: false
+        is_credit: false
       }));
 
     } catch (error) {
@@ -101,27 +270,41 @@ export const AddExpense = () => {
     }
   };
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+  const handleInputChange = (field: string, value: string | boolean) => {
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+
+      // When unchecking is_credit in edit mode, set cost to 0 (expense is settled)
+      if (field === 'is_credit' && !value && isEditMode) {
+        newData.cost = '0';
+      }
+
+      return newData;
+    });
   };
 
-  const checkDuplicateExpense = async (asofDate: string, expenseType: string, itemName: string) => {
-    const { data, error } = await supabase
+  const checkDuplicateExpense = async (asofDate: string, expenseType: string, itemName: string, excludeId?: string) => {
+    let query = supabase
       .from('expense_log')
-      .select('inserted_by')
+      .select('inserted_by, id')
       .eq('asof_date', asofDate)
       .eq('expense_type', expenseType)
-      .eq('item_name', itemName)
-      .single();
-  
-    if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+      .eq('item_name', itemName);
+
+    // If editing and excludeId is provided, exclude the current record
+    if (excludeId) {
+      query = query.neq('id', excludeId);
+    }
+
+    const { data, error } = await query.limit(1);
+
+    if (error) {
+      console.error('Error in duplicate check:', error);
       throw error;
     }
-  
-    return data;
+
+    // Return the first record if any duplicates found, otherwise null
+    return data && data.length > 0 ? data[0] : null;
   };
 
 
@@ -143,8 +326,12 @@ export const AddExpense = () => {
               <Receipt className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-800">Add Expense</h1>
-              <p className="text-slate-600">Record a new business expense</p>
+              <h1 className="text-2xl font-bold text-slate-800">
+                {isEditMode ? 'Edit Expense' : 'Add Expense'}
+              </h1>
+              <p className="text-slate-600">
+                {isEditMode ? 'Update business expense' : 'Record a new business expense'}
+              </p>
             </div>
           </div>
         </div>
@@ -220,13 +407,13 @@ export const AddExpense = () => {
               <div className="flex items-center space-x-2">
                 <input
                   type="checkbox"
-                  id="udhaar"
-                  checked={formData.udhaar}
-                  onChange={(e) => handleInputChange('udhaar', e.target.checked)}
+                  id="is_credit"
+                  checked={formData.is_credit}
+                  onChange={(e) => handleInputChange('is_credit', e.target.checked)}
                   className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
                   disabled={isLoading}
                 />
-                <Label htmlFor="udhaar" className="text-slate-700 font-medium">
+                <Label htmlFor="is_credit" className="text-slate-700 font-medium">
                   Udhaar (Credit)
                 </Label>
                 <span className="text-sm text-slate-500">
@@ -250,7 +437,7 @@ export const AddExpense = () => {
                   disabled={isLoading}
                 >
                   <Save className="h-4 w-4 mr-2" />
-                  {isLoading ? 'Saving...' : 'Save Expense'}
+                  {isLoading ? (isEditMode ? 'Updating...' : 'Saving...') : (isEditMode ? 'Update Expense' : 'Save Expense')}
                 </Button>
               </div>
             </form>

@@ -2,14 +2,16 @@ import { TableSchema, schemaService } from './schemaService';
 import { DataMaskingService } from './dataMasking';
 
 interface QueryContext {
-  tableName: string;
+  tableName: string; // Legacy field for backward compatibility
+  relevantTables: string[]; // New field for multi-table support
+  detectedIntent: string; // What the user is trying to analyze
   columns: string[];
   sampleData: any[];
   dateRange?: {
     from: string;
     to: string;
   };
-  tableSchema?: TableSchema;
+  tableSchemas: Record<string, TableSchema>; // Multiple table schemas
 }
 
 interface QueryResponse {
@@ -17,6 +19,85 @@ interface QueryResponse {
   explanation: string;
   summary: string;
   expectedResultType?: 'aggregation' | 'list' | 'single_value';
+}
+
+class TableDetectionService {
+  private static readonly TABLE_KEYWORDS = {
+    sales_log: [
+      'sales', 'sell', 'sold', 'revenue', 'income', 'customer', 'profit', 'loss',
+      'material', 'gold', 'silver', 'jewelry', 'wholesale', 'retail', 'purchase',
+      'selling', 'purity', 'weight', 'grams', 'wastage', 'tag', 'item'
+    ],
+    expense_log: [
+      'expense', 'cost', 'spend', 'spent', 'expenditure', 'outgoing', 'payment',
+      'direct', 'indirect', 'credit', 'is_credit', 'bills', 'overhead', 'udhaar', 'udhar'
+    ],
+    daily_rates: [
+      'rate', 'price', 'rates', 'pricing', 'market', 'daily', 'karat', '22k', '24k', '18k',
+      'gold rate', 'silver rate', 'market price', 'current rate'
+    ],
+    activity_log: [
+      'activity', 'log', 'audit', 'tracking', 'user', 'action', 'history', 'changes'
+    ]
+  };
+
+  static analyzeQuery(query: string): { relevantTables: string[], detectedIntent: string } {
+    const queryLower = query.toLowerCase();
+    const relevantTables: string[] = [];
+    let detectedIntent = 'general_analysis';
+
+    // Score each table based on keyword matches
+    const tableScores: Record<string, number> = {};
+
+    for (const [tableName, keywords] of Object.entries(this.TABLE_KEYWORDS)) {
+      let score = 0;
+      for (const keyword of keywords) {
+        if (queryLower.includes(keyword)) {
+          score += keyword.length; // Longer keywords get higher weight
+        }
+      }
+      tableScores[tableName] = score;
+    }
+
+    // Add tables with non-zero scores
+    for (const [tableName, score] of Object.entries(tableScores)) {
+      if (score > 0) {
+        relevantTables.push(tableName);
+      }
+    }
+
+    // Default to sales_log if no tables detected (most common use case)
+    if (relevantTables.length === 0) {
+      relevantTables.push('sales_log');
+    }
+
+    // Detect intent based on query patterns
+    if (queryLower.includes('profit') || queryLower.includes('loss') || queryLower.includes('earning')) {
+      detectedIntent = 'profit_analysis';
+    } else if (queryLower.includes('expense') || queryLower.includes('cost') || queryLower.includes('spend')) {
+      detectedIntent = 'expense_analysis';
+    } else if (queryLower.includes('rate') || queryLower.includes('price') || queryLower.includes('market')) {
+      detectedIntent = 'rate_analysis';
+    } else if (queryLower.includes('compare') || queryLower.includes('vs') || queryLower.includes('versus')) {
+      detectedIntent = 'comparative_analysis';
+    } else if (queryLower.includes('total') || queryLower.includes('sum') || queryLower.includes('amount')) {
+      detectedIntent = 'aggregation_analysis';
+    }
+
+    // Add expense_log for financial overview queries
+    if ((detectedIntent === 'profit_analysis' || queryLower.includes('financial') || queryLower.includes('overview'))
+        && !relevantTables.includes('expense_log')) {
+      relevantTables.push('expense_log');
+    }
+
+    // Add daily_rates for rate-related queries
+    if ((detectedIntent === 'profit_analysis' || queryLower.includes('rate') || queryLower.includes('price'))
+        && !relevantTables.includes('daily_rates')) {
+      relevantTables.push('daily_rates');
+    }
+
+    return { relevantTables, detectedIntent };
+  }
 }
 
 export class OpenAIService {
@@ -31,16 +112,30 @@ export class OpenAIService {
   }
 
   async generateSQLQuery(query: string, context: QueryContext): Promise<QueryResponse> {
-    // Get table schema if not provided
-    if (!context.tableSchema) {
+    // Preprocess query to handle local terminology mapping
+    const preprocessedQuery = this.preprocessQuery(query);
+
+    // Use table detection service to identify relevant tables
+    const { relevantTables, detectedIntent } = TableDetectionService.analyzeQuery(preprocessedQuery);
+
+    // Update context with detected information
+    const enhancedContext: QueryContext = {
+      ...context,
+      relevantTables,
+      detectedIntent,
+      tableSchemas: {}
+    };
+
+    // Fetch schemas for all relevant tables
+    for (const tableName of relevantTables) {
       try {
-        context.tableSchema = await schemaService.getTableSchema(context.tableName);
+        enhancedContext.tableSchemas[tableName] = await schemaService.getTableSchema(tableName);
       } catch (error) {
-        console.warn(`Failed to fetch schema for ${context.tableName}, proceeding without schema`);
+        console.warn(`Failed to fetch schema for ${tableName}, proceeding without schema`);
       }
     }
 
-    const prompt = this.buildPrompt(query, context);
+    const prompt = this.buildPrompt(preprocessedQuery, enhancedContext);
 
     try {
       const response = await fetch(`${this.baseURL}/chat/completions`, {
@@ -82,6 +177,17 @@ export class OpenAIService {
       console.error('OpenAI API error:', error);
       throw new Error('Failed to generate SQL query. Please try again.');
     }
+  }
+
+  private preprocessQuery(query: string): string {
+    // Handle local terminology mapping
+    let processedQuery = query;
+
+    // Map "udhaar" and its variations to "credit" for better AI understanding
+    const udhaarVariations = /\b(udhaar|udhar|udhaar\s+transactions?|udhar\s+transactions?)\b/gi;
+    processedQuery = processedQuery.replace(udhaarVariations, 'credit transactions');
+
+    return processedQuery;
   }
 
   async transcribeAudio(audioBlob: Blob): Promise<string> {
@@ -215,7 +321,7 @@ Format: Line 1 = Main result, Line 2 = Brief business insight.
   }
 
   private buildPrompt(query: string, context: QueryContext): string {
-    const { dateRange, sampleData } = context;
+    const { dateRange, sampleData, relevantTables, detectedIntent, tableSchemas } = context;
 
     // *** PRIVACY PROTECTION: Mask sensitive data in sample data ***
     const maskedSampleData = sampleData && sampleData.length > 0
@@ -239,23 +345,41 @@ Format: Line 1 = Main result, Line 2 = Brief business insight.
       sampleDataContext = `\nSample Data (with customer information masked for privacy):\n${JSON.stringify(maskedSampleData, null, 2)}\n`;
     }
 
-    return `
-Generate a PostgreSQL SELECT query for this request: "${query}"
+    // Build dynamic table schemas section
+    let tableSchemaSection = '';
+    if (relevantTables && relevantTables.length > 0) {
+      tableSchemaSection = 'RELEVANT TABLES DETECTED FOR YOUR QUERY:\n';
 
+      for (const tableName of relevantTables) {
+        const schema = tableSchemas[tableName];
+        if (schema) {
+          tableSchemaSection += schemaService.formatSchemaForAI(schema) + '\n';
+        } else {
+          // Fallback for missing schemas
+          tableSchemaSection += `\nTable: ${tableName}\n(Schema details unavailable)\n`;
+        }
+      }
+    } else {
+      // Fallback to all tables if detection failed
+      tableSchemaSection = `
 AVAILABLE TABLES & RELATIONSHIPS:
 You can query ANY of these tables and JOIN them as needed (exclude 'users' table for security):
 
 1. sales_log - Main sales transactions
-   - Columns: id, asof_date, inserted_by, date_time, material, type, item_name, tag_no, customer_name, customer_phone, o1_gram, o1_purity, o2_gram, o2_purity, o_cost, p_grams, p_purity, p_cost, s_purity, wastage, s_cost, profit, created_at
-
 2. expense_log - Business expenses
-   - Columns: id, asof_date, expense_type, item_name, cost, udhaar, created_at
-
 3. daily_rates - Daily precious metal rates
-   - Columns: id, asof_date, inserted_by, date_time, material, karat, n_price, o_price, created_at
-
 4. activity_log - System activity tracking
-   - Columns: id, user_id, action, details, timestamp, ip_address, user_agent
+`;
+    }
+
+    return `
+Generate a PostgreSQL SELECT query for this request: "${query}"
+
+ANALYSIS CONTEXT:
+- Detected Intent: ${detectedIntent || 'general_analysis'}
+- Relevant Tables: ${relevantTables?.join(', ') || 'sales_log'}
+
+${tableSchemaSection}
 
 BUSINESS RELATIONSHIPS:
 - sales_log.material connects to daily_rates.material (gold/silver)
@@ -281,13 +405,20 @@ Business Context:
 - Currency is Indian Rupees (₹)
 
 Business Logic Rules:
-- profit = s_cost - p_cost (+ considerations for old materials o_cost)
-- p_grams/s_grams: Weight in grams (with up to 3 decimal precision)
-- p_purity/s_purity: Purity percentage (e.g., 91.6 for 22k gold)
+- profit = selling_cost - purchase_cost + old_material_profit
+- purchase_weight_grams: Weight in grams (with up to 3 decimal precision)
+- purchase_purity/selling_purity: Purity percentage (e.g., 91.6 for 22k gold)
 - wastage: Additional percentage for retail sales
 - asof_date: Transaction date (YYYY-MM-DD format)
 - created_at: System timestamp when record was created
-- expense means cost from expense_log table expense of two type direct and indirect
+- is_credit: Boolean indicating credit transactions (also known as "udhaar" locally)
+
+IMPORTANT TERMINOLOGY MAPPING:
+- When users mention "udhaar" or "udhar", they are referring to the "is_credit" field in expense_log table
+- "udhaar" is the local Hindi/Urdu term for credit transactions or unpaid expenses
+- In SQL queries, always use "is_credit" column name, not "udhaar"
+- When filtering for udhaar/credit expenses: WHERE is_credit = true
+- When filtering for paid expenses: WHERE is_credit = false
 
 QUERY GENERATION RULES:
 1. ONLY generate SELECT statements - never INSERT, UPDATE, DELETE, DROP
@@ -304,25 +435,25 @@ QUERY GENERATION RULES:
     - explanation: brief explanation of what the query does
     - summary: what business insight this provides
 
-COMMON QUERY PATTERNS:
-- Sales analysis: Query sales_log table
-- Expense analysis: Query expense_log table
-- Rate analysis: Query daily_rates table
-- Combined analysis: JOIN sales_log with daily_rates for profit vs rate analysis
-- Financial overview: JOIN sales_log and expense_log for complete financial picture
-- Performance analysis: Aggregate across multiple tables
-
-Example format:
+Example formats:
 {
-  "sql": "SELECT s.material, SUM(s.profit) as total_profit, AVG(d.n_price) as avg_rate FROM sales_log s LEFT JOIN daily_rates d ON s.material = d.material AND s.asof_date = d.asof_date WHERE s.profit IS NOT NULL GROUP BY s.material ORDER BY total_profit DESC",
+  "sql": "SELECT s.material, SUM(s.profit) as total_profit, AVG(d.new_price_per_gram) as avg_rate FROM sales_log s LEFT JOIN daily_rates d ON s.material = d.material AND s.asof_date = d.asof_date WHERE s.profit IS NOT NULL GROUP BY s.material ORDER BY total_profit DESC",
   "explanation": "Analyzes total profit by material with average daily rates",
   "summary": "Shows which materials are most profitable and their corresponding market rates",
   "expectedResultType": "aggregation"
 }
 
+For udhaar/credit queries:
+{
+  "sql": "SELECT SUM(cost) as total_udhaar, COUNT(*) as udhaar_transactions FROM expense_log WHERE is_credit = true",
+  "explanation": "Calculates total unpaid expenses (udhaar) and count of credit transactions",
+  "summary": "Shows total outstanding credit amounts that need to be paid",
+  "expectedResultType": "aggregation"
+}
+
 Additional Notes:
 - For queries asking about "highest" or "maximum" values, include MAX() functions
-- For rate queries, use daily_rates table with n_price or o_price columns
+- For rate queries, use daily_rates table with new_price_per_gram or old_price_per_gram columns
 - For expense vs income analysis, JOIN sales_log and expense_log
 - Always provide meaningful summaries that explain business implications
 - Set expectedResultType as "aggregation" for SUM/AVG/COUNT, "list" for multiple rows, "single_value" for single results

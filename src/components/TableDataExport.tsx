@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Download, Database, Calendar, Filter, AlertCircle, ArrowLeft, Search, X, Mic, MessageSquare, Loader2, Sparkles, Square, Eye, EyeOff, Settings, CalendarIcon, ChevronDown, ChevronUp, Code } from 'lucide-react';
+import { Download, Database, Calendar, Filter, AlertCircle, ArrowLeft, Search, X, Mic, MessageSquare, Loader2, Sparkles, Square, Eye, EyeOff, Settings, CalendarIcon, ChevronDown, ChevronUp, Code, Edit } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
@@ -50,20 +50,22 @@ const COLUMN_DISPLAY_NAMES: Record<string, Record<string, string>> = {
     date_time: 'Inserted Date',
     material: 'Material',
     karat: 'Karat',
-    n_price: 'New Price (₹)',
-    o_price: 'Old Price (₹)',
+    new_price_per_gram: 'New Price (₹)',
+    old_price_per_gram: 'Old Price (₹)',
     created_at: 'Created At',
   },
   expense_log: {
+    actions: 'Actions',
     id: 'ID',
     asof_date: 'Date',
     expense_type: 'Expense Type',
     item_name: 'Item Name',
     cost: 'Cost (₹)',
-    udhaar: 'Udhaar',
+    is_credit: 'udhaar',
     created_at: 'Created At',
   },
   sales_log: {
+    actions: 'Actions',
     id: 'ID',
     asof_date: 'Date',
     inserted_by: 'Inserted By',
@@ -74,26 +76,29 @@ const COLUMN_DISPLAY_NAMES: Record<string, Record<string, string>> = {
     tag_no: 'Tag Number',
     customer_name: 'Customer Name',
     customer_phone: 'Customer Phone',
-    o1_gram: 'Old Gold 1 (g)',
-    o1_purity: 'Old Gold 1 Purity (%)',
+    old_weight_grams: 'Old Material Weight (g)',
+    old_purchase_purity: 'Old Purchase Purity (%)',
     o2_gram: 'Old Gold 2 (g)',
-    o2_purity: 'Old Gold 2 Purity (%)',
-    o_cost: 'Old Gold Cost (₹)',
-    p_grams: 'Purchase Weight (g)',
-    p_purity: 'Purchase Purity (%)',
-    p_cost: 'Purchase Cost (₹)',
-    s_purity: 'Sale Purity (%)',
+    old_sales_purity: 'Old Sales Purity (%)',
+    old_material_profit: 'Old Material Profit (₹)',
+    purchase_weight_grams: 'Purchase Weight (g)',
+    purchase_purity: 'Purchase Purity (%)',
+    purchase_cost: 'Purchase Cost (₹)',
+    selling_purity: 'Selling Purity (%)',
     wastage: 'Wastage (%)',
-    s_cost: 'Sale Cost (₹)',
+    selling_cost: 'Selling Cost (₹)',
     profit: 'Profit (₹)',
     created_at: 'Created At',
   },
   activity_log: {
     id: 'ID',
-    user_id: 'User ID',
+    user_id: 'User',
+    table_name: 'Table',
     action: 'Action',
-    details: 'Details',
-    timestamp: 'Timestamp',
+    record_id: 'Record ID',
+    old_data: 'Previous Data',
+    new_data: 'New Data',
+    timestamp: 'Date & Time',
     ip_address: 'IP Address',
     user_agent: 'User Agent',
   },
@@ -102,19 +107,35 @@ const COLUMN_DISPLAY_NAMES: Record<string, Record<string, string>> = {
 // Default visible columns for each table
 const DEFAULT_VISIBLE_COLUMNS: Record<string, string[]> = {
   users: ['id', 'username', 'role', 'created_at'],
-  daily_rates: ['id', 'asof_date', 'material', 'karat', 'n_price', 'o_price'],
-  expense_log: ['id', 'asof_date', 'expense_type', 'item_name', 'cost', 'udhaar'],
-  sales_log: ['id', 'asof_date', 'material', 'customer_name', 'p_grams', 's_cost', 'profit'],
-  activity_log: ['id', 'action', 'details', 'timestamp'],
+  daily_rates: ['id', 'asof_date', 'material', 'karat', 'new_price_per_gram', 'old_price_per_gram'],
+  expense_log: ['actions', 'id', 'asof_date', 'expense_type', 'item_name', 'cost', 'is_credit'],
+  sales_log: ['actions', 'id', 'asof_date', 'material', 'customer_name', 'purchase_weight_grams', 'selling_cost', 'profit'],
+  activity_log: ['id', 'user_id', 'table_name', 'action', 'old_data', 'new_data', 'timestamp'],
 };
 
 // Columns that should show totals (for each table)
 const COLUMNS_TO_TOTAL: Record<string, string[]> = {
-  sales_log: ['wastage','o1_gram','o2_gram','o_cost','p_grams','p_cost','s_grams', 's_cost', 'profit'],
+  sales_log: ['wastage','old_weight_grams','o2_gram','old_material_profit','purchase_weight_grams','purchase_cost','selling_cost', 'profit'],
   expense_log: ['cost'],
   daily_rates: [],
   users: [],
   activity_log: [],
+};
+
+// Helper function to get the appropriate sort column for each table
+const getSortColumn = (tableName: string): string => {
+  switch (tableName) {
+    case 'users':
+      return 'created_at';
+    case 'activity_log':
+      return 'timestamp';
+    case 'daily_rates':
+    case 'expense_log':
+    case 'sales_log':
+      return 'asof_date';
+    default:
+      return 'asof_date';
+  }
 };
 
 export const TableDataExport = () => {
@@ -198,10 +219,25 @@ export const TableDataExport = () => {
   const filteredData = useMemo(() => {
     let filtered = [...tableData];
 
+    // Sort by appropriate date column (newest first)
+    const sortColumn = getSortColumn(selectedTable || '');
+    filtered.sort((a, b) => {
+      const dateA = new Date(a[sortColumn] || 0);
+      const dateB = new Date(b[sortColumn] || 0);
+      return dateB.getTime() - dateA.getTime();
+    });
+
     // Apply date filtering if dates are set
     if (fromDate || toDate) {
       filtered = filtered.filter(row => {
-        const dateColumn = selectedTable === 'users' ? 'created_at' : 'asof_date';
+        // Use appropriate date column for each table
+        let dateColumn = 'asof_date'; // Default for sales_log, expense_log, daily_rates
+        if (selectedTable === 'users') {
+          dateColumn = 'created_at';
+        } else if (selectedTable === 'activity_log') {
+          dateColumn = 'timestamp';
+        }
+
         const rowDate = row[dateColumn];
 
         if (!rowDate) return false;
@@ -226,8 +262,8 @@ export const TableDataExport = () => {
 
         const rawValue = row[column];
 
-        // Handle boolean columns (like udhaar)
-        if (column === 'udhaar' || typeof rawValue === 'boolean') {
+        // Handle boolean columns (like is_credit)
+        if (column === 'is_credit' || typeof rawValue === 'boolean') {
           const filterLower = filterValue.toLowerCase().trim();
 
           // Convert boolean to yes/no for comparison
@@ -313,12 +349,21 @@ export const TableDataExport = () => {
 
       // Add date filtering if dates are provided
       if (fromDate && toDate) {
-        // Assume all tables have an 'asof_date' or 'created_at' column
-        const dateColumn = selectedTable === 'users' ? 'created_at' : 'asof_date';
+        // Use appropriate date column for each table
+        let dateColumn = 'asof_date'; // Default for sales_log, expense_log, daily_rates
+        if (selectedTable === 'users') {
+          dateColumn = 'created_at';
+        } else if (selectedTable === 'activity_log') {
+          dateColumn = 'timestamp';
+        }
+
         query = query.gte(dateColumn, fromDate).lte(dateColumn, toDate);
       }
 
-      const { data, error } = await query.order('id', { ascending: false }).limit(1000);
+      // Determine the appropriate date column for sorting
+      const sortColumn = getSortColumn(selectedTable);
+
+      const { data, error } = await query.order(sortColumn, { ascending: false }).limit(1000);
 
       if (error) {
         console.error('Error fetching data:', error);
@@ -333,11 +378,17 @@ export const TableDataExport = () => {
       if (data) {
         setTableData(data);
         const allColumns = Object.keys(data[0] || {});
-        setColumns(allColumns);
+
+        // Add actions column for sales_log and expense_log
+        const finalColumns = (selectedTable === 'sales_log' || selectedTable === 'expense_log')
+          ? ['actions', ...allColumns]
+          : allColumns;
+
+        setColumns(finalColumns);
 
         // Set default visible columns for the selected table
         const defaultVisible = DEFAULT_VISIBLE_COLUMNS[selectedTable] || allColumns.slice(0, 6);
-        setVisibleColumns(defaultVisible.filter(col => allColumns.includes(col)));
+        setVisibleColumns(defaultVisible.filter(col => finalColumns.includes(col)));
 
         toast({
           title: "Data Loaded",
@@ -394,13 +445,13 @@ export const TableDataExport = () => {
 
   const showFinancialColumns = () => {
     if (selectedTable === 'sales_log') {
-      const financial = ['id', 'asof_date', 'customer_name', 'material', 'p_cost', 's_cost', 'profit'];
-      setVisibleColumns(financial.filter(col => columns.includes(col)));
+      const financial = ['actions', 'id', 'asof_date', 'customer_name', 'material', 'purchase_cost', 'selling_cost', 'profit'];
+      setVisibleColumns(financial.filter(col => columns.includes(col) || col === 'actions'));
     } else if (selectedTable === 'expense_log') {
-      const financial = ['id', 'asof_date', 'expense_type', 'item_name', 'cost', 'udhaar'];
-      setVisibleColumns(financial.filter(col => columns.includes(col)));
+      const financial = ['actions', 'id', 'asof_date', 'expense_type', 'item_name', 'cost', 'is_credit'];
+      setVisibleColumns(financial.filter(col => columns.includes(col) || col === 'actions'));
     } else if (selectedTable === 'daily_rates') {
-      const financial = ['id', 'asof_date', 'material', 'karat', 'n_price', 'o_price'];
+      const financial = ['id', 'asof_date', 'material', 'karat', 'new_price_per_gram', 'old_price_per_gram'];
       setVisibleColumns(financial.filter(col => columns.includes(col)));
     } else {
       showDefaultColumns();
@@ -409,8 +460,11 @@ export const TableDataExport = () => {
 
   const showBasicInfoColumns = () => {
     if (selectedTable === 'sales_log') {
-      const basic = ['id', 'asof_date', 'customer_name', 'customer_phone', 'material', 'type'];
-      setVisibleColumns(basic.filter(col => columns.includes(col)));
+      const basic = ['actions', 'id', 'asof_date', 'customer_name', 'customer_phone', 'material', 'type'];
+      setVisibleColumns(basic.filter(col => columns.includes(col) || col === 'actions'));
+    } else if (selectedTable === 'expense_log') {
+      const basic = ['actions', 'id', 'asof_date', 'expense_type', 'item_name'];
+      setVisibleColumns(basic.filter(col => columns.includes(col) || col === 'actions'));
     } else if (selectedTable === 'users') {
       const basic = ['id', 'username', 'role', 'created_at'];
       setVisibleColumns(basic.filter(col => columns.includes(col)));
@@ -425,6 +479,50 @@ export const TableDataExport = () => {
   // Format cell value specifically for CSV export
   const formatCSVValue = (value: any, columnName?: string) => {
     if (value === null || value === undefined) return '';
+
+    // Handle JSON objects for CSV export
+    if (typeof value === 'object' && value !== null && (columnName === 'old_data' || columnName === 'new_data' || columnName === 'details')) {
+      try {
+        const jsonData = typeof value === 'string' ? JSON.parse(value) : value;
+
+        if (!jsonData || Object.keys(jsonData).length === 0) return '';
+
+        // For CSV, create a more detailed but still readable format
+        const entries = Object.entries(jsonData)
+          .filter(([key, val]) => key !== 'id' && key !== 'created_at' && key !== 'updated_at');
+
+        if (entries.length === 0) return '';
+
+        return entries.map(([key, val]) => {
+          let displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          let displayValue = val;
+
+          // Format specific value types for CSV
+          if (key.includes('cost') || key.includes('price') || key === 'profit') {
+            const numVal = parseFloat(String(val));
+            if (!isNaN(numVal)) {
+              displayValue = `₹${numVal.toLocaleString('en-IN')}`;
+            }
+          } else if (typeof val === 'boolean') {
+            displayValue = val ? 'Yes' : 'No';
+          } else if (key.includes('date') && val) {
+            try {
+              const date = new Date(String(val));
+              if (!isNaN(date.getTime())) {
+                displayValue = date.toLocaleDateString('en-IN');
+              }
+            } catch (e) {
+              // Keep original value
+            }
+          }
+
+          return `${displayKey}: ${displayValue}`;
+        }).join('; ');
+      } catch (e) {
+        // If JSON parsing fails, treat as string
+        return String(value);
+      }
+    }
 
     // Currency formatting for CSV (simple format to avoid encoding issues)
     if (columnName && (
@@ -468,9 +566,20 @@ export const TableDataExport = () => {
       return;
     }
 
-    const headers = visibleColumns.map(col => getColumnDisplayName(col)).join(',');
-    const rows = filteredData.map(row =>
-      visibleColumns.map(col => {
+    // Sort data by appropriate date column before export
+    const sortColumn = getSortColumn(selectedTable || '');
+
+    // Sort filtered data by date column (newest first)
+    const sortedData = [...filteredData].sort((a, b) => {
+      const dateA = new Date(a[sortColumn] || 0);
+      const dateB = new Date(b[sortColumn] || 0);
+      return dateB.getTime() - dateA.getTime();
+    });
+
+    const csvColumns = visibleColumns.filter(col => col !== 'actions');
+    const headers = csvColumns.map(col => getColumnDisplayName(col)).join(',');
+    const rows = sortedData.map(row =>
+      csvColumns.map(col => {
         const formattedValue = formatCSVValue(row[col], col);
         // Escape commas and quotes in CSV
         if (typeof formattedValue === 'string' && (formattedValue.includes(',') || formattedValue.includes('"') || formattedValue.includes('\n'))) {
@@ -501,6 +610,8 @@ export const TableDataExport = () => {
 
   const clearAllFilters = () => {
     setColumnFilters({});
+    setFromDate('');       // Clear "From Date" filter
+    setToDate('');         // Clear "To Date" filter
   };
 
   const processAIQuery = async () => {
@@ -561,10 +672,12 @@ export const TableDataExport = () => {
 
       // Use OpenAI service for intelligent SQL generation across all tables
       const response = await openaiService.generateSQLQuery(query, {
-        tableName: 'multi_table', // Indicate this can use multiple tables
+        tableName: 'multi_table', // Legacy field for backward compatibility
+        relevantTables: [], // Will be detected automatically
+        detectedIntent: 'user_query', // Will be detected automatically
         columns: [], // Not restricting to specific columns
         sampleData: [], // Not limiting to specific sample data
-        tableSchema: undefined, // Will use comprehensive schema info from prompt
+        tableSchemas: {}, // Will be fetched automatically
         // Only include date range if query mentions dates
         ...(hasDatesInQuery && { dateRange: { from: fromDate, to: toDate } })
       });
@@ -620,6 +733,15 @@ export const TableDataExport = () => {
           sql,
           explanation: 'Analyzes sales performance by material type (gold/silver)',
           summary: 'This shows which materials are driving the most profit for your business'
+        };
+      }
+
+      if (normalizedQuery.includes('udhaar') || normalizedQuery.includes('udhar') || (normalizedQuery.includes('credit') && normalizedQuery.includes('expense'))) {
+        const sql = `SELECT SUM(cost) as total_udhaar, COUNT(*) as udhaar_count, expense_type FROM expense_log WHERE is_credit = true AND asof_date BETWEEN '${fromDate}' AND '${toDate}' GROUP BY expense_type ORDER BY total_udhaar DESC`;
+        return {
+          sql,
+          explanation: 'Shows total unpaid expenses (udhaar) grouped by expense type',
+          summary: 'This identifies your outstanding credit amounts that need to be settled'
         };
       }
 
@@ -681,8 +803,8 @@ export const TableDataExport = () => {
           .lte('asof_date', toDate || '2024-12-31');
 
         const totalProfit = data?.reduce((sum, row) => sum + (row.profit || 0), 0) || 0;
-        const totalPurchase = data?.reduce((sum, row) => sum + (row.p_cost || 0), 0) || 0;
-        const totalSales = data?.reduce((sum, row) => sum + (row.s_cost || 0), 0) || 0;
+        const totalPurchase = data?.reduce((sum, row) => sum + (row.purchase_cost || 0), 0) || 0;
+        const totalSales = data?.reduce((sum, row) => sum + (row.selling_cost || 0), 0) || 0;
 
         return [{
           total_profit: totalProfit,
@@ -765,9 +887,70 @@ export const TableDataExport = () => {
     }
   };
 
+  // Handle edit button click
+  const handleEdit = (row: TableData) => {
+    if (selectedTable === 'sales_log') {
+      navigate(`/add-sales?edit=true&id=${row.id}`);
+    } else if (selectedTable === 'expense_log') {
+      navigate(`/add-expense?edit=true&id=${row.id}`);
+    }
+  };
+
   // Format cell value for display
   const formatCellValue = (value: any, columnName?: string, tableName?: string) => {
     if (value === null || value === undefined) return '';
+
+    // Handle JSON objects (for activity log old_data/new_data columns)
+    if (typeof value === 'object' && value !== null && (columnName === 'old_data' || columnName === 'new_data' || columnName === 'details')) {
+      try {
+        // If it's already a JSON object, format it nicely
+        const jsonData = typeof value === 'string' ? JSON.parse(value) : value;
+
+        // For activity log, show key changes in a readable format
+        if (tableName === 'activity_log' && (columnName === 'old_data' || columnName === 'new_data')) {
+          if (!jsonData || Object.keys(jsonData).length === 0) return '—';
+
+          // Show only the changed fields in a compact format
+          const entries = Object.entries(jsonData)
+            .filter(([key, val]) => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
+            .slice(0, 3); // Show max 3 fields to keep it readable
+
+          if (entries.length === 0) return '—';
+
+          return entries.map(([key, val]) => {
+            let displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            let displayValue = val;
+
+            // Format specific value types
+            if (key.includes('cost') || key.includes('price') || key === 'profit') {
+              const numVal = parseFloat(String(val));
+              if (!isNaN(numVal)) {
+                displayValue = `₹${numVal.toLocaleString('en-IN')}`;
+              }
+            } else if (typeof val === 'boolean') {
+              displayValue = val ? 'Yes' : 'No';
+            } else if (key.includes('date') && val) {
+              try {
+                const date = new Date(String(val));
+                if (!isNaN(date.getTime())) {
+                  displayValue = date.toLocaleDateString('en-IN');
+                }
+              } catch (e) {
+                // Keep original value
+              }
+            }
+
+            return `${displayKey}: ${displayValue}`;
+          }).join(', ');
+        }
+
+        // For other JSON fields, show a compact representation
+        return JSON.stringify(jsonData, null, 0).substring(0, 100) + (JSON.stringify(jsonData).length > 100 ? '...' : '');
+      } catch (e) {
+        // If JSON parsing fails, treat as string
+        return String(value).substring(0, 100) + (String(value).length > 100 ? '...' : '');
+      }
+    }
 
     // Currency formatting for cost/price columns
     if (columnName && (
@@ -1363,7 +1546,7 @@ export const TableDataExport = () => {
 
             {/* Column Filters */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-4">
-              {visibleColumns.slice(0, 6).map((column) => {
+              {visibleColumns.filter(col => col !== 'actions').slice(0, 6).map((column) => {
                 const isDateColumn = column.includes('date') || column.includes('time');
 
                 return (
@@ -1446,7 +1629,21 @@ export const TableDataExport = () => {
                     <TableRow key={index}>
                       {visibleColumns.map((column) => (
                         <TableCell key={`${index}-${column}`}>
-                          {formatCellValue(row[column], column, selectedTable)}
+                          {column === 'actions' ? (
+                            (selectedTable === 'sales_log' || selectedTable === 'expense_log') ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEdit(row)}
+                                className="h-8 w-8 p-0"
+                                title="Edit Record"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            ) : null
+                          ) : (
+                            formatCellValue(row[column], column, selectedTable)
+                          )}
                         </TableCell>
                       ))}
                     </TableRow>
@@ -1455,9 +1652,10 @@ export const TableDataExport = () => {
                   {/* Totals row */}
                   {Object.keys(totals).length > 0 && (
                     <TableRow className="font-semibold bg-gray-50">
-                      {visibleColumns.map((column) => (
+                      {visibleColumns.map((column, index) => (
                         <TableCell key={`total-${column}`}>
-                          {column === visibleColumns[0] ? 'TOTAL' :
+                          {column === 'actions' ? '' :
+                           index === 0 || (index === 1 && visibleColumns[0] === 'actions') ? 'TOTAL' :
                            totals[column] !== undefined ?
                            formatCellValue(totals[column], column, selectedTable) : ''}
                         </TableCell>

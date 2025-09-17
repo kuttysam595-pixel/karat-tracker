@@ -21,8 +21,9 @@
 ### 💰 **Financial Management**
 - **Daily Rates Tracking** - Real-time gold/silver pricing (24k, 22k, 18k)
 - **Sales Transaction Management** - Comprehensive wholesale/retail tracking
+- **Advanced Old Material Calculation** - Bidirectional purity/cost calculations with auto-recalculation
 - **Expense Logging** - Direct/indirect expense categorization with Udhaar support
-- **Profit Analytics** - Automated profit calculations and reporting
+- **Profit Analytics** - Enhanced profit calculations including old material profit tracking
 
 ### 🤖 **AI-Powered Analytics**
 - **Natural Language Queries** - Ask questions in plain English
@@ -116,33 +117,107 @@ NODE_ENV="development"
 
 ## 🗄️ Database Setup
 
-### Automated Setup (Recommended)
+### 🚀 Quick Setup (Recommended)
 
-The application includes migration files that will automatically set up your database schema:
+Execute the consolidated setup script in your Supabase SQL Editor:
 
 ```bash
-# Apply migrations using Supabase CLI
-supabase db reset
+# 1. Go to your Supabase Project → SQL Editor
+# 2. Copy and execute the complete setup script
+# File: supabase/migrations/complete-database-setup.sql
 ```
 
-### Manual Setup
+**This single script handles:**
+- ✅ New database setup from scratch
+- ✅ Existing database updates (safe to re-run)
+- ✅ All tables, indexes, and constraints
+- ✅ Complete RLS policies (including UPDATE permissions)
+- ✅ AI query functions
+- ✅ Default admin user setup
+- ✅ Verification queries
 
-If you prefer to set up the database manually, execute the following SQL scripts in your Supabase SQL Editor:
+### 📋 Step-by-Step Instructions
 
-#### 1. Core Schema Setup
+#### For New Databases:
+1. **Create a new Supabase project** at [supabase.com](https://supabase.com/)
+2. **Open SQL Editor** in your Supabase dashboard
+3. **Copy the entire content** from `supabase/migrations/complete-database-setup.sql`
+4. **Paste and execute** the script
+5. **Verify setup** using the queries shown at the end of the script
+
+#### For Existing Databases:
+1. **Backup your database** (recommended)
+2. **Open SQL Editor** in your Supabase dashboard
+3. **Copy the entire content** from `supabase/migrations/complete-database-setup.sql`
+4. **Execute the script** - it's safe to run on existing databases
+5. **Verify the updates** using the verification queries
+
+### 🔧 What the Script Creates
+
+The consolidated script includes everything from previous migration files:
+
+#### Core Tables:
+- `users` - Authentication and role management
+- `daily_rates` - Gold/silver pricing with unique constraints
+- `sales_log` - Sales transactions with profit calculations
+- `expense_log` - Business expenses with Udhaar support
+- `activity_log` - Complete audit trail
+
+#### Security & Permissions:
+- **Row Level Security (RLS)** enabled on all tables
+- **Complete CRUD policies** (SELECT, INSERT, UPDATE, DELETE)
+- **Role-based access control** for different user types
+
+#### AI & Utility Functions:
+- `get_table_schema()` - Table structure inspection
+- `execute_safe_query()` - Secure AI query execution
+
+#### Default Data:
+- **Admin user** (username: `admin`, password: `admin`)
+- **Change default credentials** after first login!
+
+### 🔍 Troubleshooting Database Setup
+
+#### Common Issues:
+
+**❌ Error: "relation already exists"**
+- ✅ **Solution**: This is normal - the script uses `IF NOT EXISTS` and safely handles existing tables
+
+**❌ Error: "permission denied"**
+- ✅ **Solution**: Ensure you're using the SQL Editor in your Supabase dashboard (not a database client)
+
+**❌ Edit functionality not working**
+- ✅ **Solution**: Execute the complete script - it fixes missing UPDATE policies
+
+**❌ RLS policy conflicts**
+- ✅ **Solution**: The script drops and recreates all policies for consistency
+
+#### Verification Steps:
+
+After running the script, verify everything is working:
+
 ```sql
--- Execute the main migration file
--- File: supabase/migrations/20250902061940_2164445b-4f80-4c98-862a-da65f704d667.sql
+-- 1. Check if all tables exist
+SELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public'
+ORDER BY table_name;
+
+-- 2. Verify RLS policies (should see UPDATE policies)
+SELECT tablename, policyname, cmd
+FROM pg_policies
+WHERE schemaname = 'public'
+ORDER BY tablename, cmd;
+
+-- 3. Test login (should return user data)
+SELECT username, role FROM users WHERE username = 'admin';
 ```
 
-#### 2. AI Query Functions
-```sql
--- Execute schema function
--- File: supabase/migrations/schema-function.sql
+#### 📁 Migration Files:
 
--- Execute query execution function
--- File: supabase/migrations/execute-query-function.sql
-```
+- **Active**: `supabase/migrations/complete-database-setup.sql` ← **Use this one**
+- **Archived**: `supabase/migrations/archive/` ← Reference only (old individual files)
+
+The complete setup script consolidates all previous migration files and adds important fixes like UPDATE policies for the edit functionality.
 
 ### 📋 Database Tables
 
@@ -197,15 +272,15 @@ karat-tracker/
 {
   material: 'gold',
   karat: '24k',
-  n_price: 7500.00,
-  o_price: 7400.00,
+  new_price_per_gram: 7500.00,
+  old_price_per_gram: 7400.00,
   asof_date: '2024-12-15'
 }
 ```
 
 ### 📈 Sales Transaction Recording
 ```typescript
-// Example: Complete sales transaction
+// Example: Complete sales transaction with new descriptive schema
 {
   customer_name: 'John Doe',
   customer_phone: '+91-9876543210',
@@ -213,22 +288,66 @@ karat-tracker/
   type: 'retail',
   item_name: 'Gold Chain',
   tag_no: 'GC001',
-  p_grams: 25.500,
-  p_purity: 91.60,
-  p_cost: 191250.00,
-  s_cost: 210000.00,
+  purchase_weight_grams: 25.500,
+  purchase_purity: 91.60,
+  purchase_cost: 191250.00,
+  selling_cost: 210000.00,
   profit: 18750.00
 }
 ```
 
+### 🔄 Advanced Old Material Cost Calculation
+
+**Revolutionary bidirectional calculation system for old jewelry exchanges**
+
+The system now features an advanced old material cost calculation that supports both purchase and sales scenarios with automatic recalculation:
+
+#### **Key Features:**
+- **Bidirectional Calculations** - Enter either purity or cost, system calculates the other
+- **Auto-Recalculation** - Values update when material type or grams change
+- **Separate Purchase & Sales** - Track old material purchase and sales with different purities
+- **Profit on Old** - Automatic calculation: `Old Sales Cost - Old Purchase Cost`
+- **Enhanced Profit Formula** - New formula: `(Selling Cost - Purchase Cost) + Profit on Old`
+
+#### **Calculation Flow:**
+```typescript
+// Old Material Calculation Structure (Updated Schema)
+{
+  old_weight_grams: 15.500,                    // Old material grams (shared)
+  old_purchase_purity: 85.00,                  // Old purchase purity %
+  old_sales_purity: 90.00,                     // Old sales purity %
+
+  // Auto-calculated display fields (not stored in DB)
+  old_purchase_cost: 98750.00,                 // old_weight_grams × (old_purchase_purity/100) × old_price_per_gram
+  old_sales_cost: 104625.00,                   // old_weight_grams × (old_sales_purity/100) × old_price_per_gram
+
+  // Final stored values
+  old_material_profit: 5875.00,                // Profit on old (sales - purchase)
+  total_profit: 24625.00                       // (selling_cost - purchase_cost) + old_material_profit
+}
+```
+
+#### **Smart Input Behaviors:**
+- **Purity Entry** → Auto-calculates respective cost
+- **Cost Entry** → Auto-calculates respective purity
+- **Material Change** → Recalculates all old costs with new rates
+- **Gram Change** → Updates both purchase and sales costs
+- **Visual Feedback** → Shows calculated values with override capability
+
+#### **Database Optimization:**
+- `o2_gram` field deprecated (set to null)
+- Renamed `o1_purity` → `old_purchase_purity` for clarity
+- Renamed `o2_purity` → `old_sales_purity` for clarity
+- Renamed `o_cost` → `old_material_profit` for semantic meaning
+
 ### 💰 Expense Tracking
 ```typescript
-// Example: Business expense entry
+// Example: Business expense entry with updated schema
 {
   expense_type: 'direct',
   item_name: 'Gold Purchase',
   cost: 50000.00,
-  udhaar: false,
+  is_credit: false,
   asof_date: '2024-12-15'
 }
 ```
@@ -400,47 +519,109 @@ echo "✅ Deployment completed successfully!"
 
 ---
 
-## 📊 API Documentation
+## 🔄 Latest Updates & Improvements
 
-### Authentication Endpoints
+### ✨ **December 2024 - Major Database Optimization & Enhancement Release**
 
-#### Login
-```http
-POST /auth/login
-Content-Type: application/json
+#### 🗄️ **Database Schema Improvements**
+- **Descriptive Column Names**: Renamed all abbreviated columns to descriptive names for better LLM query generation
+  - `p_grams` → `purchase_weight_grams`
+  - `p_purity` → `purchase_purity`
+  - `p_cost` → `purchase_cost`
+  - `s_purity` → `selling_purity`
+  - `s_cost` → `selling_cost`
+  - `o1_gram` → `old_weight_grams`
+  - `o1_purity` → `old_purchase_purity`
+  - `o2_purity` → `old_sales_purity`
+  - `o_cost` → `old_material_profit`
+  - `n_price` → `new_price_per_gram`
+  - `o_price` → `old_price_per_gram`
+  - `udhaar` → `is_credit`
 
+#### 🚀 **Enhanced Sales Form Functionality**
+- **Smart Auto-Calculation**: Comprehensive recalculation system that triggers on:
+  - Material type changes
+  - Purchase weight changes
+  - Date changes (updates rates automatically)
+  - Wastage percentage changes
+- **Material Switch Behavior**: Switching to gold retail now resets wastage and selling cost for fresh entry
+- **Real-time Updates**: All calculations update instantly when any relevant field changes
+
+#### 💸 **Expense Management Enhancement**
+- **Settlement Functionality**: Unchecking "Udhaar (Credit)" in edit mode automatically sets expense amount to 0
+- **Credit Tracking**: Better visualization and management of credit expenses
+
+#### 📊 **Activity Log Display Fix**
+- **Readable Object Display**: Fixed activity log showing `[object Object]` for old_data and new_data
+- **Smart Formatting**: JSON objects now display as readable key-value pairs
+  - Example: "Cost: ₹1,500, Item Name: Gold Chain, Is Credit: No"
+- **Enhanced CSV Export**: Activity log data exports properly formatted for analysis
+
+#### 🧠 **AI Query Enhancements**
+- **Improved Schema Understanding**: LLM can now generate more accurate SQL queries with descriptive column names
+- **Better Context Awareness**: Enhanced table detection and relationship understanding
+- **Multi-table Query Support**: Intelligent joins across related tables
+
+#### 🔧 **Technical Improvements**
+- **Migration Safety**: All database changes use safe `IF EXISTS` checks for backward compatibility
+- **Type Safety**: Updated TypeScript interfaces to match new column names
+- **Performance Optimization**: Optimized queries and reduced redundant calculations
+
+#### 📝 **Code Quality**
+- **Consistent Naming**: All components now use the new descriptive column names
+- **Error Handling**: Improved error handling for database operations
+- **Documentation**: Enhanced code comments and inline documentation
+
+### 🎯 **Migration Guide for Existing Installations**
+
+If you're upgrading from a previous version:
+
+1. **Run the Migration Script**:
+   ```sql
+   -- Execute in Supabase SQL Editor
+   -- File: supabase/migrations/rename-columns-descriptive.sql
+   ```
+
+2. **Update Your Queries**: If you have custom queries, update them to use new column names
+
+3. **Test All Functionality**: Verify that sales entry, expense tracking, and activity logs work correctly
+
+### 📊 **API Documentation**
+
+#### Database Structure Updates
+
+The database now uses semantic, descriptive column names that improve:
+- **LLM Query Generation**: AI can better understand the data structure
+- **Developer Experience**: More intuitive column names for easier development
+- **Documentation**: Self-documenting database schema
+
+#### Updated Sales Transaction Example
+```typescript
+// New descriptive schema
 {
-  "username": "admin",
-  "password": "admin"
-}
-```
+  customer_name: 'John Doe',
+  customer_phone: '+91-9876543210',
+  material: 'gold',
+  type: 'retail',
+  item_name: 'Gold Chain',
+  tag_no: 'GC001',
 
-#### Logout
-```http
-POST /auth/logout
-Authorization: Bearer <session-token>
-```
+  // Purchase details (old: p_*)
+  purchase_weight_grams: 25.500,
+  purchase_purity: 91.60,
+  purchase_cost: 191250.00,
 
-### Data Endpoints
+  // Selling details (old: s_*)
+  selling_purity: 91.60,
+  selling_cost: 210000.00,
 
-#### Get Daily Rates
-```http
-GET /api/daily-rates?date=2024-12-15
-Authorization: Bearer <session-token>
-```
+  // Old material details (enhanced)
+  old_weight_grams: 15.500,
+  old_purchase_purity: 85.00,
+  old_sales_purity: 90.00,
+  old_material_profit: 5875.00,
 
-#### Create Sales Transaction
-```http
-POST /api/sales
-Authorization: Bearer <session-token>
-Content-Type: application/json
-
-{
-  "customer_name": "John Doe",
-  "material": "gold",
-  "p_grams": 25.5,
-  "p_cost": 191250.00,
-  "s_cost": 210000.00
+  profit: 18750.00
 }
 ```
 
