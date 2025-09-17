@@ -30,7 +30,7 @@ class TableDetectionService {
     ],
     expense_log: [
       'expense', 'cost', 'spend', 'spent', 'expenditure', 'outgoing', 'payment',
-      'direct', 'indirect', 'credit', 'is_credit', 'bills', 'overhead'
+      'direct', 'indirect', 'credit', 'is_credit', 'bills', 'overhead', 'udhaar', 'udhar'
     ],
     daily_rates: [
       'rate', 'price', 'rates', 'pricing', 'market', 'daily', 'karat', '22k', '24k', '18k',
@@ -112,8 +112,11 @@ export class OpenAIService {
   }
 
   async generateSQLQuery(query: string, context: QueryContext): Promise<QueryResponse> {
+    // Preprocess query to handle local terminology mapping
+    const preprocessedQuery = this.preprocessQuery(query);
+
     // Use table detection service to identify relevant tables
-    const { relevantTables, detectedIntent } = TableDetectionService.analyzeQuery(query);
+    const { relevantTables, detectedIntent } = TableDetectionService.analyzeQuery(preprocessedQuery);
 
     // Update context with detected information
     const enhancedContext: QueryContext = {
@@ -132,7 +135,7 @@ export class OpenAIService {
       }
     }
 
-    const prompt = this.buildPrompt(query, enhancedContext);
+    const prompt = this.buildPrompt(preprocessedQuery, enhancedContext);
 
     try {
       const response = await fetch(`${this.baseURL}/chat/completions`, {
@@ -174,6 +177,17 @@ export class OpenAIService {
       console.error('OpenAI API error:', error);
       throw new Error('Failed to generate SQL query. Please try again.');
     }
+  }
+
+  private preprocessQuery(query: string): string {
+    // Handle local terminology mapping
+    let processedQuery = query;
+
+    // Map "udhaar" and its variations to "credit" for better AI understanding
+    const udhaarVariations = /\b(udhaar|udhar|udhaar\s+transactions?|udhar\s+transactions?)\b/gi;
+    processedQuery = processedQuery.replace(udhaarVariations, 'credit transactions');
+
+    return processedQuery;
   }
 
   async transcribeAudio(audioBlob: Blob): Promise<string> {
@@ -397,7 +411,14 @@ Business Logic Rules:
 - wastage: Additional percentage for retail sales
 - asof_date: Transaction date (YYYY-MM-DD format)
 - created_at: System timestamp when record was created
-- is_credit: Boolean indicating credit transactions (previously udhaar)
+- is_credit: Boolean indicating credit transactions (also known as "udhaar" locally)
+
+IMPORTANT TERMINOLOGY MAPPING:
+- When users mention "udhaar" or "udhar", they are referring to the "is_credit" field in expense_log table
+- "udhaar" is the local Hindi/Urdu term for credit transactions or unpaid expenses
+- In SQL queries, always use "is_credit" column name, not "udhaar"
+- When filtering for udhaar/credit expenses: WHERE is_credit = true
+- When filtering for paid expenses: WHERE is_credit = false
 
 QUERY GENERATION RULES:
 1. ONLY generate SELECT statements - never INSERT, UPDATE, DELETE, DROP
@@ -414,11 +435,19 @@ QUERY GENERATION RULES:
     - explanation: brief explanation of what the query does
     - summary: what business insight this provides
 
-Example format:
+Example formats:
 {
   "sql": "SELECT s.material, SUM(s.profit) as total_profit, AVG(d.new_price_per_gram) as avg_rate FROM sales_log s LEFT JOIN daily_rates d ON s.material = d.material AND s.asof_date = d.asof_date WHERE s.profit IS NOT NULL GROUP BY s.material ORDER BY total_profit DESC",
   "explanation": "Analyzes total profit by material with average daily rates",
   "summary": "Shows which materials are most profitable and their corresponding market rates",
+  "expectedResultType": "aggregation"
+}
+
+For udhaar/credit queries:
+{
+  "sql": "SELECT SUM(cost) as total_udhaar, COUNT(*) as udhaar_transactions FROM expense_log WHERE is_credit = true",
+  "explanation": "Calculates total unpaid expenses (udhaar) and count of credit transactions",
+  "summary": "Shows total outstanding credit amounts that need to be paid",
   "expectedResultType": "aggregation"
 }
 

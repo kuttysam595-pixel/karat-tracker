@@ -61,7 +61,7 @@ const COLUMN_DISPLAY_NAMES: Record<string, Record<string, string>> = {
     expense_type: 'Expense Type',
     item_name: 'Item Name',
     cost: 'Cost (₹)',
-    is_credit: 'Credit',
+    is_credit: 'udhaar',
     created_at: 'Created At',
   },
   sales_log: {
@@ -610,6 +610,8 @@ export const TableDataExport = () => {
 
   const clearAllFilters = () => {
     setColumnFilters({});
+    setFromDate('');       // Clear "From Date" filter
+    setToDate('');         // Clear "To Date" filter
   };
 
   const processAIQuery = async () => {
@@ -731,6 +733,15 @@ export const TableDataExport = () => {
           sql,
           explanation: 'Analyzes sales performance by material type (gold/silver)',
           summary: 'This shows which materials are driving the most profit for your business'
+        };
+      }
+
+      if (normalizedQuery.includes('udhaar') || normalizedQuery.includes('udhar') || (normalizedQuery.includes('credit') && normalizedQuery.includes('expense'))) {
+        const sql = `SELECT SUM(cost) as total_udhaar, COUNT(*) as udhaar_count, expense_type FROM expense_log WHERE is_credit = true AND asof_date BETWEEN '${fromDate}' AND '${toDate}' GROUP BY expense_type ORDER BY total_udhaar DESC`;
+        return {
+          sql,
+          explanation: 'Shows total unpaid expenses (udhaar) grouped by expense type',
+          summary: 'This identifies your outstanding credit amounts that need to be settled'
         };
       }
 
