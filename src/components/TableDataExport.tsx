@@ -230,7 +230,14 @@ export const TableDataExport = () => {
     // Apply date filtering if dates are set
     if (fromDate || toDate) {
       filtered = filtered.filter(row => {
-        const dateColumn = selectedTable === 'users' ? 'created_at' : 'asof_date';
+        // Use appropriate date column for each table
+        let dateColumn = 'asof_date'; // Default for sales_log, expense_log, daily_rates
+        if (selectedTable === 'users') {
+          dateColumn = 'created_at';
+        } else if (selectedTable === 'activity_log') {
+          dateColumn = 'timestamp';
+        }
+
         const rowDate = row[dateColumn];
 
         if (!rowDate) return false;
@@ -342,8 +349,14 @@ export const TableDataExport = () => {
 
       // Add date filtering if dates are provided
       if (fromDate && toDate) {
-        // Assume all tables have an 'asof_date' or 'created_at' column
-        const dateColumn = selectedTable === 'users' ? 'created_at' : 'asof_date';
+        // Use appropriate date column for each table
+        let dateColumn = 'asof_date'; // Default for sales_log, expense_log, daily_rates
+        if (selectedTable === 'users') {
+          dateColumn = 'created_at';
+        } else if (selectedTable === 'activity_log') {
+          dateColumn = 'timestamp';
+        }
+
         query = query.gte(dateColumn, fromDate).lte(dateColumn, toDate);
       }
 
