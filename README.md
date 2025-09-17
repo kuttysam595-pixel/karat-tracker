@@ -117,33 +117,107 @@ NODE_ENV="development"
 
 ## 🗄️ Database Setup
 
-### Automated Setup (Recommended)
+### 🚀 Quick Setup (Recommended)
 
-The application includes migration files that will automatically set up your database schema:
+Execute the consolidated setup script in your Supabase SQL Editor:
 
 ```bash
-# Apply migrations using Supabase CLI
-supabase db reset
+# 1. Go to your Supabase Project → SQL Editor
+# 2. Copy and execute the complete setup script
+# File: supabase/migrations/complete-database-setup.sql
 ```
 
-### Manual Setup
+**This single script handles:**
+- ✅ New database setup from scratch
+- ✅ Existing database updates (safe to re-run)
+- ✅ All tables, indexes, and constraints
+- ✅ Complete RLS policies (including UPDATE permissions)
+- ✅ AI query functions
+- ✅ Default admin user setup
+- ✅ Verification queries
 
-If you prefer to set up the database manually, execute the following SQL scripts in your Supabase SQL Editor:
+### 📋 Step-by-Step Instructions
 
-#### 1. Core Schema Setup
+#### For New Databases:
+1. **Create a new Supabase project** at [supabase.com](https://supabase.com/)
+2. **Open SQL Editor** in your Supabase dashboard
+3. **Copy the entire content** from `supabase/migrations/complete-database-setup.sql`
+4. **Paste and execute** the script
+5. **Verify setup** using the queries shown at the end of the script
+
+#### For Existing Databases:
+1. **Backup your database** (recommended)
+2. **Open SQL Editor** in your Supabase dashboard
+3. **Copy the entire content** from `supabase/migrations/complete-database-setup.sql`
+4. **Execute the script** - it's safe to run on existing databases
+5. **Verify the updates** using the verification queries
+
+### 🔧 What the Script Creates
+
+The consolidated script includes everything from previous migration files:
+
+#### Core Tables:
+- `users` - Authentication and role management
+- `daily_rates` - Gold/silver pricing with unique constraints
+- `sales_log` - Sales transactions with profit calculations
+- `expense_log` - Business expenses with Udhaar support
+- `activity_log` - Complete audit trail
+
+#### Security & Permissions:
+- **Row Level Security (RLS)** enabled on all tables
+- **Complete CRUD policies** (SELECT, INSERT, UPDATE, DELETE)
+- **Role-based access control** for different user types
+
+#### AI & Utility Functions:
+- `get_table_schema()` - Table structure inspection
+- `execute_safe_query()` - Secure AI query execution
+
+#### Default Data:
+- **Admin user** (username: `admin`, password: `admin`)
+- **Change default credentials** after first login!
+
+### 🔍 Troubleshooting Database Setup
+
+#### Common Issues:
+
+**❌ Error: "relation already exists"**
+- ✅ **Solution**: This is normal - the script uses `IF NOT EXISTS` and safely handles existing tables
+
+**❌ Error: "permission denied"**
+- ✅ **Solution**: Ensure you're using the SQL Editor in your Supabase dashboard (not a database client)
+
+**❌ Edit functionality not working**
+- ✅ **Solution**: Execute the complete script - it fixes missing UPDATE policies
+
+**❌ RLS policy conflicts**
+- ✅ **Solution**: The script drops and recreates all policies for consistency
+
+#### Verification Steps:
+
+After running the script, verify everything is working:
+
 ```sql
--- Execute the main migration file
--- File: supabase/migrations/20250902061940_2164445b-4f80-4c98-862a-da65f704d667.sql
+-- 1. Check if all tables exist
+SELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public'
+ORDER BY table_name;
+
+-- 2. Verify RLS policies (should see UPDATE policies)
+SELECT tablename, policyname, cmd
+FROM pg_policies
+WHERE schemaname = 'public'
+ORDER BY tablename, cmd;
+
+-- 3. Test login (should return user data)
+SELECT username, role FROM users WHERE username = 'admin';
 ```
 
-#### 2. AI Query Functions
-```sql
--- Execute schema function
--- File: supabase/migrations/schema-function.sql
+#### 📁 Migration Files:
 
--- Execute query execution function
--- File: supabase/migrations/execute-query-function.sql
-```
+- **Active**: `supabase/migrations/complete-database-setup.sql` ← **Use this one**
+- **Archived**: `supabase/migrations/archive/` ← Reference only (old individual files)
+
+The complete setup script consolidates all previous migration files and adds important fixes like UPDATE policies for the edit functionality.
 
 ### 📋 Database Tables
 

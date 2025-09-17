@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Download, Database, Calendar, Filter, AlertCircle, ArrowLeft, Search, X, Mic, MessageSquare, Loader2, Sparkles, Square, Eye, EyeOff, Settings, CalendarIcon, ChevronDown, ChevronUp, Code } from 'lucide-react';
+import { Download, Database, Calendar, Filter, AlertCircle, ArrowLeft, Search, X, Mic, MessageSquare, Loader2, Sparkles, Square, Eye, EyeOff, Settings, CalendarIcon, ChevronDown, ChevronUp, Code, Edit } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
@@ -55,6 +55,7 @@ const COLUMN_DISPLAY_NAMES: Record<string, Record<string, string>> = {
     created_at: 'Created At',
   },
   expense_log: {
+    actions: 'Actions',
     id: 'ID',
     asof_date: 'Date',
     expense_type: 'Expense Type',
@@ -64,6 +65,7 @@ const COLUMN_DISPLAY_NAMES: Record<string, Record<string, string>> = {
     created_at: 'Created At',
   },
   sales_log: {
+    actions: 'Actions',
     id: 'ID',
     asof_date: 'Date',
     inserted_by: 'Inserted By',
@@ -103,8 +105,8 @@ const COLUMN_DISPLAY_NAMES: Record<string, Record<string, string>> = {
 const DEFAULT_VISIBLE_COLUMNS: Record<string, string[]> = {
   users: ['id', 'username', 'role', 'created_at'],
   daily_rates: ['id', 'asof_date', 'material', 'karat', 'n_price', 'o_price'],
-  expense_log: ['id', 'asof_date', 'expense_type', 'item_name', 'cost', 'udhaar'],
-  sales_log: ['id', 'asof_date', 'material', 'customer_name', 'p_grams', 's_cost', 'profit'],
+  expense_log: ['actions', 'id', 'asof_date', 'expense_type', 'item_name', 'cost', 'udhaar'],
+  sales_log: ['actions', 'id', 'asof_date', 'material', 'customer_name', 'p_grams', 's_cost', 'profit'],
   activity_log: ['id', 'action', 'details', 'timestamp'],
 };
 
@@ -360,11 +362,17 @@ export const TableDataExport = () => {
       if (data) {
         setTableData(data);
         const allColumns = Object.keys(data[0] || {});
-        setColumns(allColumns);
+
+        // Add actions column for sales_log and expense_log
+        const finalColumns = (selectedTable === 'sales_log' || selectedTable === 'expense_log')
+          ? ['actions', ...allColumns]
+          : allColumns;
+
+        setColumns(finalColumns);
 
         // Set default visible columns for the selected table
         const defaultVisible = DEFAULT_VISIBLE_COLUMNS[selectedTable] || allColumns.slice(0, 6);
-        setVisibleColumns(defaultVisible.filter(col => allColumns.includes(col)));
+        setVisibleColumns(defaultVisible.filter(col => finalColumns.includes(col)));
 
         toast({
           title: "Data Loaded",
@@ -421,11 +429,11 @@ export const TableDataExport = () => {
 
   const showFinancialColumns = () => {
     if (selectedTable === 'sales_log') {
-      const financial = ['id', 'asof_date', 'customer_name', 'material', 'p_cost', 's_cost', 'profit'];
-      setVisibleColumns(financial.filter(col => columns.includes(col)));
+      const financial = ['actions', 'id', 'asof_date', 'customer_name', 'material', 'p_cost', 's_cost', 'profit'];
+      setVisibleColumns(financial.filter(col => columns.includes(col) || col === 'actions'));
     } else if (selectedTable === 'expense_log') {
-      const financial = ['id', 'asof_date', 'expense_type', 'item_name', 'cost', 'udhaar'];
-      setVisibleColumns(financial.filter(col => columns.includes(col)));
+      const financial = ['actions', 'id', 'asof_date', 'expense_type', 'item_name', 'cost', 'udhaar'];
+      setVisibleColumns(financial.filter(col => columns.includes(col) || col === 'actions'));
     } else if (selectedTable === 'daily_rates') {
       const financial = ['id', 'asof_date', 'material', 'karat', 'n_price', 'o_price'];
       setVisibleColumns(financial.filter(col => columns.includes(col)));
@@ -436,8 +444,11 @@ export const TableDataExport = () => {
 
   const showBasicInfoColumns = () => {
     if (selectedTable === 'sales_log') {
-      const basic = ['id', 'asof_date', 'customer_name', 'customer_phone', 'material', 'type'];
-      setVisibleColumns(basic.filter(col => columns.includes(col)));
+      const basic = ['actions', 'id', 'asof_date', 'customer_name', 'customer_phone', 'material', 'type'];
+      setVisibleColumns(basic.filter(col => columns.includes(col) || col === 'actions'));
+    } else if (selectedTable === 'expense_log') {
+      const basic = ['actions', 'id', 'asof_date', 'expense_type', 'item_name'];
+      setVisibleColumns(basic.filter(col => columns.includes(col) || col === 'actions'));
     } else if (selectedTable === 'users') {
       const basic = ['id', 'username', 'role', 'created_at'];
       setVisibleColumns(basic.filter(col => columns.includes(col)));
@@ -505,9 +516,10 @@ export const TableDataExport = () => {
       return dateB.getTime() - dateA.getTime();
     });
 
-    const headers = visibleColumns.map(col => getColumnDisplayName(col)).join(',');
+    const csvColumns = visibleColumns.filter(col => col !== 'actions');
+    const headers = csvColumns.map(col => getColumnDisplayName(col)).join(',');
     const rows = sortedData.map(row =>
-      visibleColumns.map(col => {
+      csvColumns.map(col => {
         const formattedValue = formatCSVValue(row[col], col);
         // Escape commas and quotes in CSV
         if (typeof formattedValue === 'string' && (formattedValue.includes(',') || formattedValue.includes('"') || formattedValue.includes('\n'))) {
@@ -799,6 +811,15 @@ export const TableDataExport = () => {
       }
 
       return `Query returned ${results.length} record(s) with ${resultKeys.length} data columns.`;
+    }
+  };
+
+  // Handle edit button click
+  const handleEdit = (row: TableData) => {
+    if (selectedTable === 'sales_log') {
+      navigate(`/add-sales?edit=true&id=${row.id}`);
+    } else if (selectedTable === 'expense_log') {
+      navigate(`/add-expense?edit=true&id=${row.id}`);
     }
   };
 
@@ -1400,7 +1421,7 @@ export const TableDataExport = () => {
 
             {/* Column Filters */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-4">
-              {visibleColumns.slice(0, 6).map((column) => {
+              {visibleColumns.filter(col => col !== 'actions').slice(0, 6).map((column) => {
                 const isDateColumn = column.includes('date') || column.includes('time');
 
                 return (
@@ -1483,7 +1504,21 @@ export const TableDataExport = () => {
                     <TableRow key={index}>
                       {visibleColumns.map((column) => (
                         <TableCell key={`${index}-${column}`}>
-                          {formatCellValue(row[column], column, selectedTable)}
+                          {column === 'actions' ? (
+                            (selectedTable === 'sales_log' || selectedTable === 'expense_log') ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEdit(row)}
+                                className="h-8 w-8 p-0"
+                                title="Edit Record"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            ) : null
+                          ) : (
+                            formatCellValue(row[column], column, selectedTable)
+                          )}
                         </TableCell>
                       ))}
                     </TableRow>
@@ -1492,9 +1527,10 @@ export const TableDataExport = () => {
                   {/* Totals row */}
                   {Object.keys(totals).length > 0 && (
                     <TableRow className="font-semibold bg-gray-50">
-                      {visibleColumns.map((column) => (
+                      {visibleColumns.map((column, index) => (
                         <TableCell key={`total-${column}`}>
-                          {column === visibleColumns[0] ? 'TOTAL' :
+                          {column === 'actions' ? '' :
+                           index === 0 || (index === 1 && visibleColumns[0] === 'actions') ? 'TOTAL' :
                            totals[column] !== undefined ?
                            formatCellValue(totals[column], column, selectedTable) : ''}
                         </TableCell>

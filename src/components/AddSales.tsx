@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ArrowLeft, ShoppingCart, Save, Calculator, Plus, Trash2, Package, Lock } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -52,6 +52,10 @@ interface SaleEntry {
 export const AddSales = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const isEditMode = searchParams.get('edit') === 'true';
+  const editId = searchParams.get('id');
+
   const [rates, setRates] = useState<DailyRate[]>([]);
   const [showOldMaterials, setShowOldMaterials] = useState(false);
   const [is18Karat, setIs18Karat] = useState(false);
@@ -59,6 +63,7 @@ export const AddSales = () => {
   const [batchMode, setBatchMode] = useState(false);
   const [saleEntries, setSaleEntries] = useState<SaleEntry[]>([]);
   const [basicInfoLocked, setBasicInfoLocked] = useState(false);
+  const [originalData, setOriginalData] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     asof_date: format(new Date(), 'yyyy-MM-dd'),
@@ -84,6 +89,95 @@ export const AddSales = () => {
   useEffect(() => {
     fetchRates();
   }, [formData.asof_date]);
+
+  useEffect(() => {
+    if (isEditMode && editId) {
+      fetchSalesRecord();
+    }
+  }, [isEditMode, editId]);
+
+  const fetchSalesRecord = async () => {
+    if (!editId) {
+      console.log('No editId provided');
+      return;
+    }
+
+    console.log('fetchSalesRecord called with editId:', editId, 'Type:', typeof editId);
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('sales_log')
+        .select('*')
+        .eq('id', editId)
+        .single();
+
+      console.log('Initial fetch result:', { data, error });
+
+      if (error) {
+        console.error('Error fetching sales record:', error);
+        toast.error('Failed to fetch sales record');
+        navigate('/table-export');
+        return;
+      }
+
+      if (data) {
+        setOriginalData(data);
+
+        // Pre-populate form with existing data
+        setFormData({
+          asof_date: data.asof_date,
+          material: data.material,
+          type: data.type,
+          item_name: data.item_name,
+          tag_no: data.tag_no,
+          customer_name: data.customer_name,
+          customer_phone: data.customer_phone,
+          p_grams: data.p_grams?.toString() || '',
+          p_purity: data.p_purity?.toString() || '',
+          s_purity: data.s_purity?.toString() || '',
+          wastage: data.wastage?.toString() || '',
+          s_cost: data.s_cost?.toString() || '',
+          o1_gram: data.o1_gram?.toString() || '',
+          o1_purity: data.o1_purity?.toString() || '',
+          o2_gram: data.o2_gram?.toString() || '',
+          o2_purity: data.o2_purity?.toString() || '',
+          old_purchase_cost: '',
+          old_sales_cost: ''
+        });
+
+        // Set component states based on data
+        setShowOldMaterials(data.o1_gram > 0);
+        if (data.material === 'gold' && data.type === 'retail') {
+          // Determine if it's 18k based on the selling cost vs calculated cost
+          const grams = parseFloat(data.p_grams);
+          const wastage = parseFloat(data.wastage) / 100;
+          const sellingGrams = grams + (grams * wastage);
+
+          // Check against both 18k and 22k rates to determine which was used
+          const rate18k = rates.find(r => r.material === 'gold' && r.karat === '18k');
+          const rate22k = rates.find(r => r.material === 'gold' && r.karat === '22k');
+
+          if (rate18k && rate22k) {
+            const calc18k = rate18k.n_price * sellingGrams;
+            const calc22k = rate22k.n_price * sellingGrams;
+            const diff18k = Math.abs(data.s_cost - calc18k);
+            const diff22k = Math.abs(data.s_cost - calc22k);
+            setIs18Karat(diff18k < diff22k);
+          }
+        }
+
+        // Disable batch mode in edit mode
+        setBatchMode(false);
+        setBasicInfoLocked(false);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('An unexpected error occurred');
+      navigate('/table-export');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const fetchRates = async () => {
     // First try to get from localStorage cache
@@ -364,6 +458,78 @@ export const AddSales = () => {
         newData.s_cost = '';
       }
 
+      // Auto-recalculate selling cost when grams change (for gold retail with existing wastage)
+      if (field === 'p_grams' && newData.material === 'gold' && newData.type === 'retail' && value && newData.wastage) {
+        const calculatedCost = calculateSellingCostFromWastage(newData.wastage, value);
+        newData.s_cost = calculatedCost > 0 ? calculatedCost.toFixed(2) : '';
+      }
+
+      // Clear selling cost when grams is cleared (for gold retail)
+      if (field === 'p_grams' && !value && newData.material === 'gold' && newData.type === 'retail') {
+        newData.s_cost = '';
+      }
+
+      // Auto-recalculate selling cost when grams change (for silver retail)
+      if (field === 'p_grams' && newData.material === 'silver' && newData.type === 'retail' && value) {
+        // For silver retail, recalculate only if no manual selling cost is entered
+        if (!newData.s_cost) {
+          const rate = getRateByMaterialAndKarat('silver', '');
+          const grams = parseFloat(value);
+          if (rate && grams > 0) {
+            newData.s_cost = (rate.n_price * grams).toFixed(2);
+          }
+        }
+      }
+
+      // Auto-recalculate selling cost when grams change (for wholesale with existing s_purity)
+      if (field === 'p_grams' && newData.type === 'wholesale' && value && newData.s_purity && newData.material) {
+        const grams = parseFloat(value);
+        const purity = parseFloat(newData.s_purity) / 100;
+        let rate;
+
+        if (newData.material === 'gold') {
+          rate = getRateByMaterialAndKarat('gold', '24k');
+        } else if (newData.material === 'silver') {
+          rate = getRateByMaterialAndKarat('silver', '');
+        }
+
+        if (rate && grams > 0) {
+          newData.s_cost = (rate.n_price * grams * purity).toFixed(2);
+        }
+      }
+
+      // Auto-recalculate selling cost when s_purity changes (for wholesale with existing p_grams)
+      if (field === 's_purity' && newData.type === 'wholesale' && value && newData.p_grams && newData.material) {
+        const grams = parseFloat(newData.p_grams);
+        const purity = parseFloat(value) / 100;
+        let rate;
+
+        if (newData.material === 'gold') {
+          rate = getRateByMaterialAndKarat('gold', '24k');
+        } else if (newData.material === 'silver') {
+          rate = getRateByMaterialAndKarat('silver', '');
+        }
+
+        if (rate && grams > 0) {
+          newData.s_cost = (rate.n_price * grams * purity).toFixed(2);
+        }
+      }
+
+      // Clear selling cost when grams is cleared (for wholesale and silver retail)
+      if (field === 'p_grams' && !value) {
+        if ((newData.type === 'wholesale') || (newData.material === 'silver' && newData.type === 'retail')) {
+          newData.s_cost = '';
+        }
+      }
+
+      // Clear selling cost when s_purity is cleared (for wholesale)
+      if (field === 's_purity' && !value && newData.type === 'wholesale') {
+        newData.s_cost = '';
+      }
+
+      // Note: Purchase cost is automatically recalculated via calculatePurchaseCost() function
+      // when p_grams or p_purity changes, so no manual intervention needed for purchase cost
+
       // Recalculate old costs when o1_gram changes
       if (field === 'o1_gram' && value && newData.material) {
         // Recalculate old purchase cost if o1_purity exists
@@ -546,27 +712,28 @@ export const AddSales = () => {
 
   const checkDuplicateSale = async (asofDate: string, itemName: string, customerName: string, pGrams: number) => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('sales_log')
-        .select('inserted_by')
+        .select('inserted_by, id')
         .eq('asof_date', asofDate)
         .eq('item_name', itemName)
         .eq('customer_name', customerName)
-        .eq('p_grams', pGrams)
-        .limit(1);
+        .eq('p_grams', pGrams);
+
+      // If in edit mode, exclude the current record from duplicate check
+      if (isEditMode && editId) {
+        query = query.neq('id', editId);
+      }
+
+      const { data, error } = await query.limit(1);
 
       if (error) {
         console.error('Error checking for duplicate sale:', error);
         throw error;
       }
 
-      // If any rows found, return the first one (duplicate exists)
-      if (data && data.length > 0) {
-        return data[0];
-      }
-
-      // No duplicates found
-      return null;
+      // Return the first record if any duplicates found, otherwise null
+      return data && data.length > 0 ? data[0] : null;
     } catch (error) {
       console.error('Error checking for duplicate sale:', error);
       throw error;
@@ -672,6 +839,140 @@ export const AddSales = () => {
       return newEntries;
     });
     toast.success('Item removed from batch');
+  };
+
+  const updateSalesRecord = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!user || rates.length === 0) {
+      toast.error('Daily rates not available for selected date');
+      return;
+    }
+
+    if (!editId || !originalData) {
+      toast.error('Original sales data not found');
+      return;
+    }
+
+    // Validate required fields
+    const requiredFields = ['material', 'type', 'item_name', 'tag_no', 'customer_name', 'p_grams', 'p_purity'];
+    const missingFields = requiredFields.filter(field => !formData[field as keyof typeof formData]);
+
+    if (missingFields.length > 0) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+
+    setIsLoading(true);
+
+    // Check for duplicate entry first (excluding current record)
+    try {
+      const duplicateEntry = await checkDuplicateSale(
+        formData.asof_date,
+        formData.item_name,
+        formData.customer_name,
+        parseFloat(formData.p_grams)
+      );
+
+      if (duplicateEntry) {
+        toast.error(`Duplicate entry detected! This sale (${formData.item_name} - ${formData.p_grams}g for ${formData.customer_name}) was already entered by ${duplicateEntry.inserted_by}.`);
+        setIsLoading(false);
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking for duplicate sale:', error);
+      toast.error('Failed to check for duplicate entries. Please try again.');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      console.log('Updating sales record with ID:', editId, 'Type:', typeof editId);
+
+      const purchaseCost = calculatePurchaseCost();
+      const sellingCost = calculateSellingCost();
+      const oldCost = calculateOldCost();
+      const profit = calculateProfit();
+
+      const salesData = {
+        asof_date: formData.asof_date,
+        material: formData.material,
+        type: formData.type,
+        item_name: formData.item_name,
+        tag_no: formData.tag_no,
+        customer_name: formData.customer_name,
+        customer_phone: formData.customer_phone,
+        p_grams: parseFloat(formData.p_grams),
+        p_purity: parseFloat(formData.p_purity),
+        p_cost: purchaseCost,
+        s_purity: formData.s_purity ? parseFloat(formData.s_purity) : null,
+        wastage: formData.wastage ? parseFloat(formData.wastage) : null,
+        s_cost: sellingCost,
+        o1_gram: formData.o1_gram ? parseFloat(formData.o1_gram) : null,
+        o1_purity: formData.o1_purity ? parseFloat(formData.o1_purity) : null,
+        o2_gram: null, // No longer used - set to null
+        o2_purity: formData.o2_purity ? parseFloat(formData.o2_purity) : null,
+        o_cost: oldCost,
+        profit: profit
+      };
+
+      // First check if the record exists
+      console.log('Checking if record exists with ID:', editId);
+      const { data: existingRecord, error: checkError } = await supabase
+        .from('sales_log')
+        .select('*')
+        .eq('id', editId)
+        .single();
+
+      console.log('Existence check result:', { existingRecord, checkError });
+
+      if (checkError || !existingRecord) {
+        console.error('Record not found for ID:', editId, 'Error:', checkError);
+        throw new Error(`Sales record with ID ${editId} not found`);
+      }
+
+      console.log('Record exists, proceeding with update for ID:', editId);
+      console.log('Update data:', salesData);
+
+      const { data, error } = await supabase
+        .from('sales_log')
+        .update(salesData)
+        .eq('id', editId)
+        .select();
+
+      console.log('Update result:', { data, error });
+
+      if (error) {
+        console.error('Update error:', error);
+        throw error;
+      }
+
+      if (!data || data.length === 0) {
+        console.error('No data returned from update. Data:', data);
+        throw new Error('Record not found or could not be updated');
+      }
+
+      const updatedRecord = data[0];
+
+      // Log the activity manually
+      await logActivityWithContext(
+        user.username,
+        'sales_log',
+        'UPDATE',
+        updatedRecord.id,
+        originalData,
+        updatedRecord
+      );
+
+      toast.success('Sale updated successfully!');
+      navigate('/table-export');
+
+    } catch (error) {
+      console.error('Error updating sale:', error);
+      toast.error('Failed to update sale');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const submitSingleSale = async (e: React.FormEvent) => {
@@ -928,6 +1229,12 @@ export const AddSales = () => {
   };
 
   const handleSubmit = (e: React.FormEvent) => {
+    // If in edit mode, update the record
+    if (isEditMode) {
+      updateSalesRecord(e);
+      return;
+    }
+
     // If we have batch entries, submit them, otherwise submit single sale
     if (saleEntries.length > 0) {
       submitBatchSales();
@@ -976,8 +1283,12 @@ export const AddSales = () => {
               <ShoppingCart className="h-5 w-5 md:h-6 md:w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl md:text-2xl font-bold text-slate-800">Add Sales</h1>
-              <p className="text-sm md:text-base text-slate-600">Record a new sales transaction</p>
+              <h1 className="text-xl md:text-2xl font-bold text-slate-800">
+                {isEditMode ? 'Edit Sales' : 'Add Sales'}
+              </h1>
+              <p className="text-sm md:text-base text-slate-600">
+                {isEditMode ? 'Update sales transaction' : 'Record a new sales transaction'}
+              </p>
             </div>
           </div>
         </div>
@@ -1286,20 +1597,22 @@ export const AddSales = () => {
               )}
             </CardContent>
 
-            {/* Add to Batch Button - Always visible */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200">
-              <Button
-                onClick={(e) => {
-                  e.preventDefault();
-                  addToBatch();
-                }}
-                className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold"
-                disabled={isLoading || !canEnterSales}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add to Batch
-              </Button>
-            </div>
+            {/* Add to Batch Button - Hidden in edit mode */}
+            {!isEditMode && (
+              <div className="p-4 bg-slate-50 border-t border-slate-200">
+                <Button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    addToBatch();
+                  }}
+                  className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold"
+                  disabled={isLoading || !canEnterSales}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add to Batch
+                </Button>
+              </div>
+            )}
             </Card>
 
           {/* Old Materials */}
@@ -1482,12 +1795,12 @@ export const AddSales = () => {
             <Button
               type="submit"
               className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold"
-              disabled={isLoading || !canEnterSales || saleEntries.length > 0}
+              disabled={isLoading || !canEnterSales || (!isEditMode && saleEntries.length > 0)}
             >
               <Save className="h-4 w-4 mr-2" />
-              {isLoading ? 'Completing...' : 'Complete Sales'}
+              {isLoading ? (isEditMode ? 'Updating...' : 'Completing...') : (isEditMode ? 'Update Sales' : 'Complete Sales')}
             </Button>
-            {saleEntries.length > 0 && (
+            {!isEditMode && saleEntries.length > 0 && (
               <Button
                 type="button"
                 onClick={submitBatchSales}
@@ -1501,8 +1814,8 @@ export const AddSales = () => {
           </div>
         </form>
 
-        {/* Batch Entries Display */}
-        {saleEntries.length > 0 && (
+        {/* Batch Entries Display - Hidden in edit mode */}
+        {!isEditMode && saleEntries.length > 0 && (
           <Card className="mt-4 md:mt-6 shadow-xl border-0 bg-white/90 backdrop-blur-sm">
             <CardHeader className="pb-3 md:pb-6">
               <CardTitle className="text-lg md:text-xl text-slate-800 flex items-center justify-between">
