@@ -25,7 +25,7 @@ export const AddExpense = () => {
     expense_type: '',
     item_name: '',
     cost: '',
-    udhaar: false
+    is_credit: false
   });
   const [isLoading, setIsLoading] = useState(false);
   const [originalData, setOriginalData] = useState<any>(null);
@@ -69,7 +69,7 @@ export const AddExpense = () => {
           expense_type: data.expense_type,
           item_name: data.item_name,
           cost: data.cost?.toString() || '',
-          udhaar: data.udhaar || false
+          is_credit: data.is_credit || false
         });
       }
     } catch (error) {
@@ -121,7 +121,7 @@ export const AddExpense = () => {
         expense_type: formData.expense_type,
         item_name: formData.item_name,
         cost: parseFloat(formData.cost),
-        udhaar: formData.udhaar
+        is_credit: formData.is_credit
       };
 
       // First check if the record exists
@@ -228,7 +228,7 @@ export const AddExpense = () => {
         expense_type: formData.expense_type,
         item_name: formData.item_name,
         cost: parseFloat(formData.cost),
-        udhaar: formData.udhaar
+        is_credit: formData.is_credit
       };
 
       const { data, error } = await supabase
@@ -259,7 +259,7 @@ export const AddExpense = () => {
         expense_type: '',
         item_name: '',
         cost: '',
-        udhaar: false
+        is_credit: false
       }));
 
     } catch (error) {
@@ -270,11 +270,17 @@ export const AddExpense = () => {
     }
   };
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+  const handleInputChange = (field: string, value: string | boolean) => {
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+
+      // When unchecking is_credit in edit mode, set cost to 0 (expense is settled)
+      if (field === 'is_credit' && !value && isEditMode) {
+        newData.cost = '0';
+      }
+
+      return newData;
+    });
   };
 
   const checkDuplicateExpense = async (asofDate: string, expenseType: string, itemName: string, excludeId?: string) => {
@@ -401,13 +407,13 @@ export const AddExpense = () => {
               <div className="flex items-center space-x-2">
                 <input
                   type="checkbox"
-                  id="udhaar"
-                  checked={formData.udhaar}
-                  onChange={(e) => handleInputChange('udhaar', e.target.checked)}
+                  id="is_credit"
+                  checked={formData.is_credit}
+                  onChange={(e) => handleInputChange('is_credit', e.target.checked)}
                   className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
                   disabled={isLoading}
                 />
-                <Label htmlFor="udhaar" className="text-slate-700 font-medium">
+                <Label htmlFor="is_credit" className="text-slate-700 font-medium">
                   Udhaar (Credit)
                 </Label>
                 <span className="text-sm text-slate-500">

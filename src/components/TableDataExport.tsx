@@ -50,8 +50,8 @@ const COLUMN_DISPLAY_NAMES: Record<string, Record<string, string>> = {
     date_time: 'Inserted Date',
     material: 'Material',
     karat: 'Karat',
-    n_price: 'New Price (₹)',
-    o_price: 'Old Price (₹)',
+    new_price_per_gram: 'New Price (₹)',
+    old_price_per_gram: 'Old Price (₹)',
     created_at: 'Created At',
   },
   expense_log: {
@@ -61,7 +61,7 @@ const COLUMN_DISPLAY_NAMES: Record<string, Record<string, string>> = {
     expense_type: 'Expense Type',
     item_name: 'Item Name',
     cost: 'Cost (₹)',
-    udhaar: 'Udhaar',
+    is_credit: 'Credit',
     created_at: 'Created At',
   },
   sales_log: {
@@ -76,26 +76,29 @@ const COLUMN_DISPLAY_NAMES: Record<string, Record<string, string>> = {
     tag_no: 'Tag Number',
     customer_name: 'Customer Name',
     customer_phone: 'Customer Phone',
-    o1_gram: 'Old Gold 1 (g)',
-    o1_purity: 'Old Gold 1 Purity (%)',
+    old_weight_grams: 'Old Material Weight (g)',
+    old_purchase_purity: 'Old Purchase Purity (%)',
     o2_gram: 'Old Gold 2 (g)',
-    o2_purity: 'Old Gold 2 Purity (%)',
-    o_cost: 'Old Gold Cost (₹)',
-    p_grams: 'Purchase Weight (g)',
-    p_purity: 'Purchase Purity (%)',
-    p_cost: 'Purchase Cost (₹)',
-    s_purity: 'Sale Purity (%)',
+    old_sales_purity: 'Old Sales Purity (%)',
+    old_material_profit: 'Old Material Profit (₹)',
+    purchase_weight_grams: 'Purchase Weight (g)',
+    purchase_purity: 'Purchase Purity (%)',
+    purchase_cost: 'Purchase Cost (₹)',
+    selling_purity: 'Selling Purity (%)',
     wastage: 'Wastage (%)',
-    s_cost: 'Sale Cost (₹)',
+    selling_cost: 'Selling Cost (₹)',
     profit: 'Profit (₹)',
     created_at: 'Created At',
   },
   activity_log: {
     id: 'ID',
-    user_id: 'User ID',
+    user_id: 'User',
+    table_name: 'Table',
     action: 'Action',
-    details: 'Details',
-    timestamp: 'Timestamp',
+    record_id: 'Record ID',
+    old_data: 'Previous Data',
+    new_data: 'New Data',
+    timestamp: 'Date & Time',
     ip_address: 'IP Address',
     user_agent: 'User Agent',
   },
@@ -104,15 +107,15 @@ const COLUMN_DISPLAY_NAMES: Record<string, Record<string, string>> = {
 // Default visible columns for each table
 const DEFAULT_VISIBLE_COLUMNS: Record<string, string[]> = {
   users: ['id', 'username', 'role', 'created_at'],
-  daily_rates: ['id', 'asof_date', 'material', 'karat', 'n_price', 'o_price'],
-  expense_log: ['actions', 'id', 'asof_date', 'expense_type', 'item_name', 'cost', 'udhaar'],
-  sales_log: ['actions', 'id', 'asof_date', 'material', 'customer_name', 'p_grams', 's_cost', 'profit'],
-  activity_log: ['id', 'action', 'details', 'timestamp'],
+  daily_rates: ['id', 'asof_date', 'material', 'karat', 'new_price_per_gram', 'old_price_per_gram'],
+  expense_log: ['actions', 'id', 'asof_date', 'expense_type', 'item_name', 'cost', 'is_credit'],
+  sales_log: ['actions', 'id', 'asof_date', 'material', 'customer_name', 'purchase_weight_grams', 'selling_cost', 'profit'],
+  activity_log: ['id', 'user_id', 'table_name', 'action', 'old_data', 'new_data', 'timestamp'],
 };
 
 // Columns that should show totals (for each table)
 const COLUMNS_TO_TOTAL: Record<string, string[]> = {
-  sales_log: ['wastage','o1_gram','o2_gram','o_cost','p_grams','p_cost','s_grams', 's_cost', 'profit'],
+  sales_log: ['wastage','old_weight_grams','o2_gram','old_material_profit','purchase_weight_grams','purchase_cost','selling_cost', 'profit'],
   expense_log: ['cost'],
   daily_rates: [],
   users: [],
@@ -252,8 +255,8 @@ export const TableDataExport = () => {
 
         const rawValue = row[column];
 
-        // Handle boolean columns (like udhaar)
-        if (column === 'udhaar' || typeof rawValue === 'boolean') {
+        // Handle boolean columns (like is_credit)
+        if (column === 'is_credit' || typeof rawValue === 'boolean') {
           const filterLower = filterValue.toLowerCase().trim();
 
           // Convert boolean to yes/no for comparison
@@ -429,13 +432,13 @@ export const TableDataExport = () => {
 
   const showFinancialColumns = () => {
     if (selectedTable === 'sales_log') {
-      const financial = ['actions', 'id', 'asof_date', 'customer_name', 'material', 'p_cost', 's_cost', 'profit'];
+      const financial = ['actions', 'id', 'asof_date', 'customer_name', 'material', 'purchase_cost', 'selling_cost', 'profit'];
       setVisibleColumns(financial.filter(col => columns.includes(col) || col === 'actions'));
     } else if (selectedTable === 'expense_log') {
-      const financial = ['actions', 'id', 'asof_date', 'expense_type', 'item_name', 'cost', 'udhaar'];
+      const financial = ['actions', 'id', 'asof_date', 'expense_type', 'item_name', 'cost', 'is_credit'];
       setVisibleColumns(financial.filter(col => columns.includes(col) || col === 'actions'));
     } else if (selectedTable === 'daily_rates') {
-      const financial = ['id', 'asof_date', 'material', 'karat', 'n_price', 'o_price'];
+      const financial = ['id', 'asof_date', 'material', 'karat', 'new_price_per_gram', 'old_price_per_gram'];
       setVisibleColumns(financial.filter(col => columns.includes(col)));
     } else {
       showDefaultColumns();
@@ -463,6 +466,50 @@ export const TableDataExport = () => {
   // Format cell value specifically for CSV export
   const formatCSVValue = (value: any, columnName?: string) => {
     if (value === null || value === undefined) return '';
+
+    // Handle JSON objects for CSV export
+    if (typeof value === 'object' && value !== null && (columnName === 'old_data' || columnName === 'new_data' || columnName === 'details')) {
+      try {
+        const jsonData = typeof value === 'string' ? JSON.parse(value) : value;
+
+        if (!jsonData || Object.keys(jsonData).length === 0) return '';
+
+        // For CSV, create a more detailed but still readable format
+        const entries = Object.entries(jsonData)
+          .filter(([key, val]) => key !== 'id' && key !== 'created_at' && key !== 'updated_at');
+
+        if (entries.length === 0) return '';
+
+        return entries.map(([key, val]) => {
+          let displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          let displayValue = val;
+
+          // Format specific value types for CSV
+          if (key.includes('cost') || key.includes('price') || key === 'profit') {
+            const numVal = parseFloat(String(val));
+            if (!isNaN(numVal)) {
+              displayValue = `₹${numVal.toLocaleString('en-IN')}`;
+            }
+          } else if (typeof val === 'boolean') {
+            displayValue = val ? 'Yes' : 'No';
+          } else if (key.includes('date') && val) {
+            try {
+              const date = new Date(String(val));
+              if (!isNaN(date.getTime())) {
+                displayValue = date.toLocaleDateString('en-IN');
+              }
+            } catch (e) {
+              // Keep original value
+            }
+          }
+
+          return `${displayKey}: ${displayValue}`;
+        }).join('; ');
+      } catch (e) {
+        // If JSON parsing fails, treat as string
+        return String(value);
+      }
+    }
 
     // Currency formatting for CSV (simple format to avoid encoding issues)
     if (columnName && (
@@ -610,10 +657,12 @@ export const TableDataExport = () => {
 
       // Use OpenAI service for intelligent SQL generation across all tables
       const response = await openaiService.generateSQLQuery(query, {
-        tableName: 'multi_table', // Indicate this can use multiple tables
+        tableName: 'multi_table', // Legacy field for backward compatibility
+        relevantTables: [], // Will be detected automatically
+        detectedIntent: 'user_query', // Will be detected automatically
         columns: [], // Not restricting to specific columns
         sampleData: [], // Not limiting to specific sample data
-        tableSchema: undefined, // Will use comprehensive schema info from prompt
+        tableSchemas: {}, // Will be fetched automatically
         // Only include date range if query mentions dates
         ...(hasDatesInQuery && { dateRange: { from: fromDate, to: toDate } })
       });
@@ -730,8 +779,8 @@ export const TableDataExport = () => {
           .lte('asof_date', toDate || '2024-12-31');
 
         const totalProfit = data?.reduce((sum, row) => sum + (row.profit || 0), 0) || 0;
-        const totalPurchase = data?.reduce((sum, row) => sum + (row.p_cost || 0), 0) || 0;
-        const totalSales = data?.reduce((sum, row) => sum + (row.s_cost || 0), 0) || 0;
+        const totalPurchase = data?.reduce((sum, row) => sum + (row.purchase_cost || 0), 0) || 0;
+        const totalSales = data?.reduce((sum, row) => sum + (row.selling_cost || 0), 0) || 0;
 
         return [{
           total_profit: totalProfit,
@@ -826,6 +875,58 @@ export const TableDataExport = () => {
   // Format cell value for display
   const formatCellValue = (value: any, columnName?: string, tableName?: string) => {
     if (value === null || value === undefined) return '';
+
+    // Handle JSON objects (for activity log old_data/new_data columns)
+    if (typeof value === 'object' && value !== null && (columnName === 'old_data' || columnName === 'new_data' || columnName === 'details')) {
+      try {
+        // If it's already a JSON object, format it nicely
+        const jsonData = typeof value === 'string' ? JSON.parse(value) : value;
+
+        // For activity log, show key changes in a readable format
+        if (tableName === 'activity_log' && (columnName === 'old_data' || columnName === 'new_data')) {
+          if (!jsonData || Object.keys(jsonData).length === 0) return '—';
+
+          // Show only the changed fields in a compact format
+          const entries = Object.entries(jsonData)
+            .filter(([key, val]) => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
+            .slice(0, 3); // Show max 3 fields to keep it readable
+
+          if (entries.length === 0) return '—';
+
+          return entries.map(([key, val]) => {
+            let displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            let displayValue = val;
+
+            // Format specific value types
+            if (key.includes('cost') || key.includes('price') || key === 'profit') {
+              const numVal = parseFloat(String(val));
+              if (!isNaN(numVal)) {
+                displayValue = `₹${numVal.toLocaleString('en-IN')}`;
+              }
+            } else if (typeof val === 'boolean') {
+              displayValue = val ? 'Yes' : 'No';
+            } else if (key.includes('date') && val) {
+              try {
+                const date = new Date(String(val));
+                if (!isNaN(date.getTime())) {
+                  displayValue = date.toLocaleDateString('en-IN');
+                }
+              } catch (e) {
+                // Keep original value
+              }
+            }
+
+            return `${displayKey}: ${displayValue}`;
+          }).join(', ');
+        }
+
+        // For other JSON fields, show a compact representation
+        return JSON.stringify(jsonData, null, 0).substring(0, 100) + (JSON.stringify(jsonData).length > 100 ? '...' : '');
+      } catch (e) {
+        // If JSON parsing fails, treat as string
+        return String(value).substring(0, 100) + (String(value).length > 100 ? '...' : '');
+      }
+    }
 
     // Currency formatting for cost/price columns
     if (columnName && (

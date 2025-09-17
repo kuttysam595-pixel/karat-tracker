@@ -73,8 +73,8 @@ export type Database = {
           inserted_by: string
           karat: string
           material: string
-          n_price: number
-          o_price: number
+          new_price_per_gram: number
+          old_price_per_gram: number
         }
         Insert: {
           asof_date: string
@@ -84,8 +84,8 @@ export type Database = {
           inserted_by: string
           karat: string
           material: string
-          n_price: number
-          o_price: number
+          new_price_per_gram: number
+          old_price_per_gram: number
         }
         Update: {
           asof_date?: string
@@ -95,8 +95,8 @@ export type Database = {
           inserted_by?: string
           karat?: string
           material?: string
-          n_price?: number
-          o_price?: number
+          new_price_per_gram?: number
+          old_price_per_gram?: number
         }
         Relationships: [
           {
@@ -118,7 +118,7 @@ export type Database = {
           id: string
           inserted_by: string
           item_name: string
-          udhaar: boolean
+          is_credit: boolean
         }
         Insert: {
           asof_date: string
@@ -129,7 +129,7 @@ export type Database = {
           id?: string
           inserted_by: string
           item_name: string
-          udhaar?: boolean
+          is_credit?: boolean
         }
         Update: {
           asof_date?: string
@@ -140,7 +140,7 @@ export type Database = {
           id?: string
           inserted_by?: string
           item_name?: string
-          udhaar?: boolean
+          is_credit?: boolean
         }
         Relationships: [
           {
@@ -163,17 +163,17 @@ export type Database = {
           inserted_by: string
           item_name: string
           material: string
-          o_cost: number | null
-          o1_gram: number | null
-          o1_purity: number | null
+          old_material_profit: number | null
+          old_weight_grams: number | null
+          old_purchase_purity: number | null
           o2_gram: number | null
-          o2_purity: number | null
-          p_cost: number
-          p_grams: number
-          p_purity: number
+          old_sales_purity: number | null
+          purchase_cost: number
+          purchase_weight_grams: number
+          purchase_purity: number
           profit: number
-          s_cost: number
-          s_purity: number | null
+          selling_cost: number
+          selling_purity: number | null
           tag_no: string
           type: string
           wastage: number | null
@@ -188,17 +188,17 @@ export type Database = {
           inserted_by: string
           item_name: string
           material: string
-          o_cost?: number | null
-          o1_gram?: number | null
-          o1_purity?: number | null
+          old_material_profit?: number | null
+          old_weight_grams?: number | null
+          old_purchase_purity?: number | null
           o2_gram?: number | null
-          o2_purity?: number | null
-          p_cost: number
-          p_grams: number
-          p_purity: number
+          old_sales_purity?: number | null
+          purchase_cost: number
+          purchase_weight_grams: number
+          purchase_purity: number
           profit: number
-          s_cost: number
-          s_purity?: number | null
+          selling_cost: number
+          selling_purity?: number | null
           tag_no: string
           type: string
           wastage?: number | null
@@ -213,17 +213,17 @@ export type Database = {
           inserted_by?: string
           item_name?: string
           material?: string
-          o_cost?: number | null
-          o1_gram?: number | null
-          o1_purity?: number | null
+          old_material_profit?: number | null
+          old_weight_grams?: number | null
+          old_purchase_purity?: number | null
           o2_gram?: number | null
-          o2_purity?: number | null
-          p_cost?: number
-          p_grams?: number
-          p_purity?: number
+          old_sales_purity?: number | null
+          purchase_cost?: number
+          purchase_weight_grams?: number
+          purchase_purity?: number
           profit?: number
-          s_cost?: number
-          s_purity?: number | null
+          selling_cost?: number
+          selling_purity?: number | null
           tag_no?: string
           type?: string
           wastage?: number | null

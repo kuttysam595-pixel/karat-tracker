@@ -272,15 +272,15 @@ karat-tracker/
 {
   material: 'gold',
   karat: '24k',
-  n_price: 7500.00,
-  o_price: 7400.00,
+  new_price_per_gram: 7500.00,
+  old_price_per_gram: 7400.00,
   asof_date: '2024-12-15'
 }
 ```
 
 ### 📈 Sales Transaction Recording
 ```typescript
-// Example: Complete sales transaction
+// Example: Complete sales transaction with new descriptive schema
 {
   customer_name: 'John Doe',
   customer_phone: '+91-9876543210',
@@ -288,10 +288,10 @@ karat-tracker/
   type: 'retail',
   item_name: 'Gold Chain',
   tag_no: 'GC001',
-  p_grams: 25.500,
-  p_purity: 91.60,
-  p_cost: 191250.00,
-  s_cost: 210000.00,
+  purchase_weight_grams: 25.500,
+  purchase_purity: 91.60,
+  purchase_cost: 191250.00,
+  selling_cost: 210000.00,
   profit: 18750.00
 }
 ```
@@ -311,19 +311,19 @@ The system now features an advanced old material cost calculation that supports 
 
 #### **Calculation Flow:**
 ```typescript
-// Old Material Calculation Structure
+// Old Material Calculation Structure (Updated Schema)
 {
-  o1_gram: 15.500,                    // Old material grams (shared)
-  o1_purity: 85.00,                   // Old purchase purity %
-  o2_purity: 90.00,                   // Old sales purity %
+  old_weight_grams: 15.500,                    // Old material grams (shared)
+  old_purchase_purity: 85.00,                  // Old purchase purity %
+  old_sales_purity: 90.00,                     // Old sales purity %
 
   // Auto-calculated display fields (not stored in DB)
-  old_purchase_cost: 98750.00,        // o1_gram × (o1_purity/100) × old_price
-  old_sales_cost: 104625.00,          // o1_gram × (o2_purity/100) × old_price
+  old_purchase_cost: 98750.00,                 // old_weight_grams × (old_purchase_purity/100) × old_price_per_gram
+  old_sales_cost: 104625.00,                   // old_weight_grams × (old_sales_purity/100) × old_price_per_gram
 
   // Final stored values
-  o_cost: 5875.00,                    // Profit on old (sales - purchase)
-  total_profit: 24625.00              // (s_cost - p_cost) + o_cost
+  old_material_profit: 5875.00,                // Profit on old (sales - purchase)
+  total_profit: 24625.00                       // (selling_cost - purchase_cost) + old_material_profit
 }
 ```
 
@@ -336,18 +336,18 @@ The system now features an advanced old material cost calculation that supports 
 
 #### **Database Optimization:**
 - `o2_gram` field deprecated (set to null)
-- Repurposed `o1_purity` for old purchase purity
-- Repurposed `o2_purity` for old sales purity
-- `o_cost` now stores profit on old materials
+- Renamed `o1_purity` → `old_purchase_purity` for clarity
+- Renamed `o2_purity` → `old_sales_purity` for clarity
+- Renamed `o_cost` → `old_material_profit` for semantic meaning
 
 ### 💰 Expense Tracking
 ```typescript
-// Example: Business expense entry
+// Example: Business expense entry with updated schema
 {
   expense_type: 'direct',
   item_name: 'Gold Purchase',
   cost: 50000.00,
-  udhaar: false,
+  is_credit: false,
   asof_date: '2024-12-15'
 }
 ```
@@ -519,47 +519,109 @@ echo "✅ Deployment completed successfully!"
 
 ---
 
-## 📊 API Documentation
+## 🔄 Latest Updates & Improvements
 
-### Authentication Endpoints
+### ✨ **December 2024 - Major Database Optimization & Enhancement Release**
 
-#### Login
-```http
-POST /auth/login
-Content-Type: application/json
+#### 🗄️ **Database Schema Improvements**
+- **Descriptive Column Names**: Renamed all abbreviated columns to descriptive names for better LLM query generation
+  - `p_grams` → `purchase_weight_grams`
+  - `p_purity` → `purchase_purity`
+  - `p_cost` → `purchase_cost`
+  - `s_purity` → `selling_purity`
+  - `s_cost` → `selling_cost`
+  - `o1_gram` → `old_weight_grams`
+  - `o1_purity` → `old_purchase_purity`
+  - `o2_purity` → `old_sales_purity`
+  - `o_cost` → `old_material_profit`
+  - `n_price` → `new_price_per_gram`
+  - `o_price` → `old_price_per_gram`
+  - `udhaar` → `is_credit`
 
+#### 🚀 **Enhanced Sales Form Functionality**
+- **Smart Auto-Calculation**: Comprehensive recalculation system that triggers on:
+  - Material type changes
+  - Purchase weight changes
+  - Date changes (updates rates automatically)
+  - Wastage percentage changes
+- **Material Switch Behavior**: Switching to gold retail now resets wastage and selling cost for fresh entry
+- **Real-time Updates**: All calculations update instantly when any relevant field changes
+
+#### 💸 **Expense Management Enhancement**
+- **Settlement Functionality**: Unchecking "Udhaar (Credit)" in edit mode automatically sets expense amount to 0
+- **Credit Tracking**: Better visualization and management of credit expenses
+
+#### 📊 **Activity Log Display Fix**
+- **Readable Object Display**: Fixed activity log showing `[object Object]` for old_data and new_data
+- **Smart Formatting**: JSON objects now display as readable key-value pairs
+  - Example: "Cost: ₹1,500, Item Name: Gold Chain, Is Credit: No"
+- **Enhanced CSV Export**: Activity log data exports properly formatted for analysis
+
+#### 🧠 **AI Query Enhancements**
+- **Improved Schema Understanding**: LLM can now generate more accurate SQL queries with descriptive column names
+- **Better Context Awareness**: Enhanced table detection and relationship understanding
+- **Multi-table Query Support**: Intelligent joins across related tables
+
+#### 🔧 **Technical Improvements**
+- **Migration Safety**: All database changes use safe `IF EXISTS` checks for backward compatibility
+- **Type Safety**: Updated TypeScript interfaces to match new column names
+- **Performance Optimization**: Optimized queries and reduced redundant calculations
+
+#### 📝 **Code Quality**
+- **Consistent Naming**: All components now use the new descriptive column names
+- **Error Handling**: Improved error handling for database operations
+- **Documentation**: Enhanced code comments and inline documentation
+
+### 🎯 **Migration Guide for Existing Installations**
+
+If you're upgrading from a previous version:
+
+1. **Run the Migration Script**:
+   ```sql
+   -- Execute in Supabase SQL Editor
+   -- File: supabase/migrations/rename-columns-descriptive.sql
+   ```
+
+2. **Update Your Queries**: If you have custom queries, update them to use new column names
+
+3. **Test All Functionality**: Verify that sales entry, expense tracking, and activity logs work correctly
+
+### 📊 **API Documentation**
+
+#### Database Structure Updates
+
+The database now uses semantic, descriptive column names that improve:
+- **LLM Query Generation**: AI can better understand the data structure
+- **Developer Experience**: More intuitive column names for easier development
+- **Documentation**: Self-documenting database schema
+
+#### Updated Sales Transaction Example
+```typescript
+// New descriptive schema
 {
-  "username": "admin",
-  "password": "admin"
-}
-```
+  customer_name: 'John Doe',
+  customer_phone: '+91-9876543210',
+  material: 'gold',
+  type: 'retail',
+  item_name: 'Gold Chain',
+  tag_no: 'GC001',
 
-#### Logout
-```http
-POST /auth/logout
-Authorization: Bearer <session-token>
-```
+  // Purchase details (old: p_*)
+  purchase_weight_grams: 25.500,
+  purchase_purity: 91.60,
+  purchase_cost: 191250.00,
 
-### Data Endpoints
+  // Selling details (old: s_*)
+  selling_purity: 91.60,
+  selling_cost: 210000.00,
 
-#### Get Daily Rates
-```http
-GET /api/daily-rates?date=2024-12-15
-Authorization: Bearer <session-token>
-```
+  // Old material details (enhanced)
+  old_weight_grams: 15.500,
+  old_purchase_purity: 85.00,
+  old_sales_purity: 90.00,
+  old_material_profit: 5875.00,
 
-#### Create Sales Transaction
-```http
-POST /api/sales
-Authorization: Bearer <session-token>
-Content-Type: application/json
-
-{
-  "customer_name": "John Doe",
-  "material": "gold",
-  "p_grams": 25.5,
-  "p_cost": 191250.00,
-  "s_cost": 210000.00
+  profit: 18750.00
 }
 ```
 

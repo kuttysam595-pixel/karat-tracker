@@ -13,8 +13,8 @@ import { logActivityWithContext } from '@/lib/activityLogger';
 interface DailyRate {
   material: string;
   karat: string;
-  n_price: number;
-  o_price: number;
+  new_price_per_gram: number;
+  old_price_per_gram: number;
 }
 
 export const DailyRatesBanner = () => {
@@ -26,10 +26,10 @@ export const DailyRatesBanner = () => {
   const { user } = useAuth();
 
   const defaultRates: DailyRate[] = [
-    { material: 'gold', karat: '24k', n_price: 0, o_price: 0 },
-    { material: 'gold', karat: '22k', n_price: 0, o_price: 0 },
-    { material: 'gold', karat: '18k', n_price: 0, o_price: 0 },
-    { material: 'silver', karat: '', n_price: 0, o_price: 0 },
+    { material: 'gold', karat: '24k', new_price_per_gram: 0, old_price_per_gram: 0 },
+    { material: 'gold', karat: '22k', new_price_per_gram: 0, old_price_per_gram: 0 },
+    { material: 'gold', karat: '18k', new_price_per_gram: 0, old_price_per_gram: 0 },
+    { material: 'silver', karat: '', new_price_per_gram: 0, old_price_per_gram: 0 },
   ];
 
   useEffect(() => {
@@ -57,8 +57,8 @@ export const DailyRatesBanner = () => {
       return existing ? {
         material: existing.material,
         karat: existing.karat,
-        n_price: existing.n_price,
-        o_price: existing.o_price
+        new_price_per_gram: existing.new_price_per_gram || 0,
+        old_price_per_gram: existing.old_price_per_gram || 0
       } : defaultRate;
     });
 
@@ -84,8 +84,8 @@ export const DailyRatesBanner = () => {
         asof_date: selectedDate,
         material: rate.material,
         karat: rate.karat,
-        n_price: rate.n_price,
-        o_price: rate.o_price,
+        new_price_per_gram: rate.new_price_per_gram,
+        old_price_per_gram: rate.old_price_per_gram,
       }));
 
       // Get existing rates to determine INSERT vs UPDATE
@@ -151,7 +151,7 @@ export const DailyRatesBanner = () => {
     setIsEditing(false);
   };
 
-  const updateEditingRate = (index: number, field: 'n_price' | 'o_price', value: string) => {
+  const updateEditingRate = (index: number, field: 'new_price_per_gram' | 'old_price_per_gram', value: string) => {
     const newRates = [...editingRates];
     newRates[index] = {
       ...newRates[index],
@@ -242,14 +242,14 @@ export const DailyRatesBanner = () => {
                   {isEditing ? (
                     <Input
                       type="number"
-                      value={rate.n_price}
-                      onChange={(e) => updateEditingRate(index, 'n_price', e.target.value)}
+                      value={rate.new_price_per_gram}
+                      onChange={(e) => updateEditingRate(index, 'new_price_per_gram', e.target.value)}
                       className="bg-white/20 border-white/30 text-white placeholder-white/50 text-sm"
                       placeholder="0"
                     />
                   ) : (
                     <p className="text-white font-semibold text-lg">
-                      {rate.n_price > 0 ? formatCurrency(rate.n_price) : '₹0'}
+                      {rate.new_price_per_gram > 0 ? formatCurrency(rate.new_price_per_gram) : '₹0'}
                     </p>
                   )}
                 </div>
@@ -259,14 +259,14 @@ export const DailyRatesBanner = () => {
                     {isEditing ? (
                       <Input
                         type="number"
-                        value={rate.o_price}
-                        onChange={(e) => updateEditingRate(index, 'o_price', e.target.value)}
+                        value={rate.old_price_per_gram}
+                        onChange={(e) => updateEditingRate(index, 'old_price_per_gram', e.target.value)}
                         className="bg-white/20 border-white/30 text-white placeholder-white/50 text-sm"
                         placeholder="0"
                       />
                     ) : (
                       <p className="text-amber-100 font-medium">
-                        {rate.o_price > 0 ? formatCurrency(rate.o_price) : '₹0'}
+                        {rate.old_price_per_gram > 0 ? formatCurrency(rate.old_price_per_gram) : '₹0'}
                       </p>
                     )}
                   </div>
