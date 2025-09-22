@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Download, Database, Calendar, Filter, AlertCircle, ArrowLeft, Search, X, Mic, MessageSquare, Loader2, Sparkles, Square, Eye, EyeOff, Settings, CalendarIcon, ChevronDown, ChevronUp, Code, Edit } from 'lucide-react';
+import { Download, Database, Calendar, Filter, AlertCircle, ArrowLeft, Search, X, Mic, MessageSquare, Loader2, Sparkles, Square, Eye, EyeOff, Settings, CalendarIcon, ChevronDown, ChevronUp, Code, Edit, Trash } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
@@ -16,6 +16,7 @@ import { useAudioRecorder, isAudioRecordingSupported } from '@/hooks/useAudioRec
 import { DataMaskingService } from '@/lib/dataMasking';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { format } from 'date-fns';
 
 interface TableData {
@@ -107,10 +108,10 @@ const COLUMN_DISPLAY_NAMES: Record<string, Record<string, string>> = {
 // Default visible columns for each table
 const DEFAULT_VISIBLE_COLUMNS: Record<string, string[]> = {
   users: ['id', 'username', 'role', 'created_at'],
-  daily_rates: ['id', 'asof_date', 'material', 'karat', 'new_price_per_gram', 'old_price_per_gram'],
-  expense_log: ['actions', 'id', 'asof_date', 'expense_type', 'item_name', 'cost', 'is_credit'],
-  sales_log: ['actions', 'id', 'asof_date', 'material', 'customer_name', 'purchase_weight_grams', 'selling_cost', 'profit'],
-  activity_log: ['id', 'user_id', 'table_name', 'action', 'old_data', 'new_data', 'timestamp'],
+  daily_rates: ['asof_date', 'material', 'karat', 'new_price_per_gram', 'old_price_per_gram'],
+  expense_log: ['actions', 'asof_date', 'expense_type', 'item_name', 'cost', 'is_credit'],
+  sales_log: ['actions', 'asof_date', 'material', 'type', 'item_name', 'tag_no', 'customer_name', 'purchase_weight_grams'],
+  activity_log: ['user_id', 'table_name', 'action', 'old_data', 'new_data', 'timestamp'],
 };
 
 // Columns that should show totals (for each table)
@@ -165,6 +166,9 @@ export const TableDataExport = () => {
   const [toDateOpen, setToDateOpen] = useState(false);
   const [columnDatePopoverOpen, setColumnDatePopoverOpen] = useState<Record<string, boolean>>({});
   const [showDeveloperInfo, setShowDeveloperInfo] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [recordToDelete, setRecordToDelete] = useState<TableData | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Audio recording hook
   const {
@@ -445,13 +449,13 @@ export const TableDataExport = () => {
 
   const showFinancialColumns = () => {
     if (selectedTable === 'sales_log') {
-      const financial = ['actions', 'id', 'asof_date', 'customer_name', 'material', 'purchase_cost', 'selling_cost', 'profit'];
+      const financial = ['actions','asof_date', 'customer_name', 'material', 'purchase_cost', 'selling_cost', 'profit'];
       setVisibleColumns(financial.filter(col => columns.includes(col) || col === 'actions'));
     } else if (selectedTable === 'expense_log') {
-      const financial = ['actions', 'id', 'asof_date', 'expense_type', 'item_name', 'cost', 'is_credit'];
+      const financial = ['actions', 'asof_date', 'expense_type', 'item_name', 'cost', 'is_credit'];
       setVisibleColumns(financial.filter(col => columns.includes(col) || col === 'actions'));
     } else if (selectedTable === 'daily_rates') {
-      const financial = ['id', 'asof_date', 'material', 'karat', 'new_price_per_gram', 'old_price_per_gram'];
+      const financial = ['asof_date', 'material', 'karat', 'new_price_per_gram', 'old_price_per_gram'];
       setVisibleColumns(financial.filter(col => columns.includes(col)));
     } else {
       showDefaultColumns();
@@ -893,6 +897,90 @@ export const TableDataExport = () => {
       navigate(`/add-sales?edit=true&id=${row.id}`);
     } else if (selectedTable === 'expense_log') {
       navigate(`/add-expense?edit=true&id=${row.id}`);
+    }
+  };
+
+  // Handle delete button click - opens confirmation dialog
+  const handleDeleteClick = (row: TableData) => {
+    setRecordToDelete(row);
+    setShowDeleteConfirm(true);
+  };
+
+  // Handle delete cancellation
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+    setRecordToDelete(null);
+  };
+
+  // Handle confirmed deletion with activity logging
+  const handleDeleteConfirm = async () => {
+    if (!recordToDelete || !selectedTable) return;
+
+    setIsDeleting(true);
+    try {
+      // First, log the deletion to activity_log
+      const activityLogData = {
+        user_id: user?.username, // Foreign key references users(username), not users(id)
+        table_name: selectedTable,
+        action: 'DELETE',
+        record_id: recordToDelete.id,
+        old_data: recordToDelete,
+        new_data: null,
+        timestamp: new Date().toISOString(),
+        ip_address: null, // Could be enhanced to capture actual IP
+        user_agent: navigator.userAgent
+      };
+
+      const { error: activityError } = await supabase
+        .from('activity_log')
+        .insert([activityLogData]);
+
+      if (activityError) {
+        console.error('Failed to log activity:', activityError);
+        toast({
+          title: "Error",
+          description: "Failed to log the deletion activity. Operation cancelled for security.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Then delete the actual record
+      const { error: deleteError } = await supabase
+        .from(selectedTable)
+        .delete()
+        .eq('id', recordToDelete.id);
+
+      if (deleteError) {
+        console.error('Failed to delete record:', deleteError);
+        toast({
+          title: "Delete Failed",
+          description: "Failed to delete the record. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Success - refresh data and show confirmation
+      await fetchTableData();
+      toast({
+        title: "Record Deleted",
+        description: `Record deleted successfully and logged to activity history.`,
+      });
+
+      // Close dialog
+      setShowDeleteConfirm(false);
+      setRecordToDelete(null);
+
+    } catch (error) {
+      console.error('Error during deletion:', error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred during deletion.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -1631,15 +1719,26 @@ export const TableDataExport = () => {
                         <TableCell key={`${index}-${column}`}>
                           {column === 'actions' ? (
                             (selectedTable === 'sales_log' || selectedTable === 'expense_log') ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleEdit(row)}
-                                className="h-8 w-8 p-0"
-                                title="Edit Record"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleEdit(row)}
+                                  className="h-8 w-8 p-0"
+                                  title="Edit Record"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDeleteClick(row)}
+                                  className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
+                                  title="Delete Record"
+                                >
+                                  <Trash className="h-4 w-4" />
+                                </Button>
+                              </div>
                             ) : null
                           ) : (
                             formatCellValue(row[column], column, selectedTable)
@@ -1673,6 +1772,81 @@ export const TableDataExport = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="w-5 h-5" />
+              Confirm Delete Operation
+            </DialogTitle>
+            <DialogDescription className="space-y-3">
+              <div className="text-amber-600 font-medium">
+                ⚠️ This action cannot be undone and will be logged for audit purposes.
+              </div>
+
+              {recordToDelete && selectedTable && (
+                <div className="bg-gray-50 border rounded-lg p-4 space-y-2">
+                  <div className="font-medium text-gray-900">
+                    You are about to permanently delete this {selectedTable === 'sales_log' ? 'sales' : 'expense'} record:
+                  </div>
+
+                  {selectedTable === 'sales_log' && (
+                    <div className="space-y-1 text-sm">
+                      <div><span className="font-medium">Customer:</span> {recordToDelete.customer_name || 'N/A'}</div>
+                      <div><span className="font-medium">Date:</span> {recordToDelete.asof_date ? new Date(recordToDelete.asof_date).toLocaleDateString('en-IN') : 'N/A'}</div>
+                      <div><span className="font-medium">Material:</span> {recordToDelete.material || 'N/A'}</div>
+                      <div><span className="font-medium">Selling Cost:</span> {recordToDelete.selling_cost ? `₹${parseFloat(recordToDelete.selling_cost).toLocaleString('en-IN')}` : 'N/A'}</div>
+                      <div><span className="font-medium">Profit:</span> {recordToDelete.profit ? `₹${parseFloat(recordToDelete.profit).toLocaleString('en-IN')}` : 'N/A'}</div>
+                    </div>
+                  )}
+
+                  {selectedTable === 'expense_log' && (
+                    <div className="space-y-1 text-sm">
+                      <div><span className="font-medium">Date:</span> {recordToDelete.asof_date ? new Date(recordToDelete.asof_date).toLocaleDateString('en-IN') : 'N/A'}</div>
+                      <div><span className="font-medium">Expense Type:</span> {recordToDelete.expense_type || 'N/A'}</div>
+                      <div><span className="font-medium">Item Name:</span> {recordToDelete.item_name || 'N/A'}</div>
+                      <div><span className="font-medium">Cost:</span> {recordToDelete.cost ? `₹${parseFloat(recordToDelete.cost).toLocaleString('en-IN')}` : 'N/A'}</div>
+                      <div><span className="font-medium">Credit Status:</span> {recordToDelete.is_credit ? 'Udhaar (Credit)' : 'Paid'}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={handleDeleteCancel}
+              disabled={isDeleting}
+              className="w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={isDeleting}
+              className="w-full sm:w-auto"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash className="w-4 h-4 mr-2" />
+                  Delete Permanently
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       </div>
     </div>
   );
