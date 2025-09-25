@@ -1633,8 +1633,8 @@ export const TableDataExport = () => {
             )}
 
             {/* Column Filters */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-4">
-              {visibleColumns.filter(col => col !== 'actions').slice(0, 6).map((column) => {
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 mb-4">
+              {visibleColumns.filter(col => col !== 'actions').map((column) => {
                 const isDateColumn = column.includes('date') || column.includes('time');
 
                 return (

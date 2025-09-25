@@ -1482,7 +1482,7 @@ export const AddSales = () => {
         <form onSubmit={handleSubmit} className="space-y-3 md:space-y-6">
           {/* Basic Information */}
           <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm relative">
-            {basicInfoLocked && (
+            {basicInfoLocked && !batchMode && (
               <div className="absolute inset-0 bg-slate-300/50 backdrop-blur-sm rounded-lg z-10 flex items-center justify-center">
                 <div className="bg-white/90 px-4 py-3 rounded-lg shadow-lg border border-slate-200 flex items-center gap-3">
                   <Lock className="h-5 w-5 text-red-500" />
@@ -1509,7 +1509,7 @@ export const AddSales = () => {
                     value={formData.asof_date}
                     onChange={(e) => handleInputChange('asof_date', e.target.value)}
                     className="border-slate-300 focus:border-green-400 focus:ring-green-400"
-                    disabled={isLoading}
+                    disabled={isLoading || batchMode}
                   />
                 </div>
                 <div className="space-y-2">
@@ -1548,7 +1548,7 @@ export const AddSales = () => {
                     value={formData.customer_name}
                     onChange={(e) => handleInputChange('customer_name', e.target.value)}
                     className="border-slate-300 focus:border-green-400 focus:ring-green-400"
-                    disabled={isLoading || !canEnterSales}
+                    disabled={isLoading || !canEnterSales || batchMode}
                   />
                 </div>
                 <div className="space-y-2">
@@ -1560,7 +1560,7 @@ export const AddSales = () => {
                     value={formData.customer_phone}
                     onChange={(e) => handleInputChange('customer_phone', e.target.value)}
                     className="border-slate-300 focus:border-green-400 focus:ring-green-400"
-                    disabled={isLoading || !canEnterSales}
+                    disabled={isLoading || !canEnterSales || batchMode}
                   />
                 </div>
               </div>
