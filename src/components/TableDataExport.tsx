@@ -116,7 +116,7 @@ const DEFAULT_VISIBLE_COLUMNS: Record<string, string[]> = {
 
 // Columns that should show totals (for each table)
 const COLUMNS_TO_TOTAL: Record<string, string[]> = {
-  sales_log: ['wastage','old_weight_grams','o2_gram','old_material_profit','purchase_weight_grams','purchase_cost','selling_cost', 'profit'],
+  sales_log: ['wastage','old_weight_grams','old_material_profit','purchase_weight_grams','purchase_cost','selling_cost', 'profit'],
   expense_log: ['cost'],
   daily_rates: [],
   users: [],
@@ -341,7 +341,7 @@ export const TableDataExport = () => {
         const value = parseFloat(row[column]) || 0;
         return sum + value;
       }, 0);
-      totalsObj[column] = total;
+      totalsObj[column] = parseFloat(total.toFixed(2));
     });
     return totalsObj;
   }, [filteredData, loadedTable]);
