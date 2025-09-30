@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Download, Database, Calendar, Filter, AlertCircle, ArrowLeft, Search, X, Mic, MessageSquare, Loader2, Sparkles, Square, Eye, EyeOff, Settings, CalendarIcon, ChevronDown, ChevronUp, Code, Edit, Trash } from 'lucide-react';
+import { Download, Database, Calendar, Filter, AlertCircle, ArrowLeft, Search, X, Mic, MessageSquare, Loader2, Sparkles, Square, Eye, EyeOff, Settings, CalendarIcon, ChevronDown, ChevronUp, Code, Edit, Trash, Group } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
@@ -144,6 +144,7 @@ export const TableDataExport = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [selectedTable, setSelectedTable] = useState<TableName | ''>('');
+  const [loadedTable, setLoadedTable] = useState<TableName | ''>('');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [tableData, setTableData] = useState<TableData[]>([]);
@@ -169,6 +170,7 @@ export const TableDataExport = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<TableData | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isGrouped, setIsGrouped] = useState(false);
 
   // Audio recording hook
   const {
@@ -206,8 +208,8 @@ export const TableDataExport = () => {
   }, [hasAccess, toast]);
 
   const getColumnDisplayName = (column: string): string => {
-    if (selectedTable && COLUMN_DISPLAY_NAMES[selectedTable]) {
-      return COLUMN_DISPLAY_NAMES[selectedTable][column] || column;
+    if (loadedTable && COLUMN_DISPLAY_NAMES[loadedTable]) {
+      return COLUMN_DISPLAY_NAMES[loadedTable][column] || column;
     }
     return column;
   };
@@ -224,7 +226,7 @@ export const TableDataExport = () => {
     let filtered = [...tableData];
 
     // Sort by appropriate date column (newest first)
-    const sortColumn = getSortColumn(selectedTable || '');
+    const sortColumn = getSortColumn(loadedTable || '');
     filtered.sort((a, b) => {
       const dateA = new Date(a[sortColumn] || 0);
       const dateB = new Date(b[sortColumn] || 0);
@@ -236,9 +238,9 @@ export const TableDataExport = () => {
       filtered = filtered.filter(row => {
         // Use appropriate date column for each table
         let dateColumn = 'asof_date'; // Default for sales_log, expense_log, daily_rates
-        if (selectedTable === 'users') {
+        if (loadedTable === 'users') {
           dateColumn = 'created_at';
-        } else if (selectedTable === 'activity_log') {
+        } else if (loadedTable === 'activity_log') {
           dateColumn = 'timestamp';
         }
 
@@ -327,14 +329,14 @@ export const TableDataExport = () => {
         });
       });
     });
-  }, [tableData, columnFilters, fromDate, toDate, selectedTable]);
+  }, [tableData, columnFilters, fromDate, toDate, loadedTable]);
 
   // Calculate totals for numeric columns
   const totals = useMemo(() => {
-    if (!selectedTable || !COLUMNS_TO_TOTAL[selectedTable]) return {};
+    if (!loadedTable || !COLUMNS_TO_TOTAL[loadedTable]) return {};
 
     const totalsObj: Record<string, number> = {};
-    COLUMNS_TO_TOTAL[selectedTable].forEach(column => {
+    COLUMNS_TO_TOTAL[loadedTable].forEach(column => {
       const total = filteredData.reduce((sum, row) => {
         const value = parseFloat(row[column]) || 0;
         return sum + value;
@@ -342,7 +344,64 @@ export const TableDataExport = () => {
       totalsObj[column] = total;
     });
     return totalsObj;
-  }, [filteredData, selectedTable]);
+  }, [filteredData, loadedTable]);
+
+  // Group data by item_name (for expense_log and sales_log)
+  const groupedData = useMemo(() => {
+    if (!isGrouped) return [];
+
+    if (loadedTable === 'expense_log') {
+      const groups: Record<string, { item_name: string; count: number; total_cost: number }> = {};
+
+      filteredData.forEach(row => {
+        // Normalize the item name: trim whitespace and convert to lowercase for grouping
+        const rawItemName = row.item_name || 'Unnamed Item';
+        const normalizedKey = rawItemName.trim().toLowerCase();
+
+        if (!groups[normalizedKey]) {
+          groups[normalizedKey] = {
+            item_name: rawItemName.trim(), // Store the original trimmed name
+            count: 0,
+            total_cost: 0
+          };
+        }
+        groups[normalizedKey].count++;
+        groups[normalizedKey].total_cost += parseFloat(row.cost) || 0;
+      });
+
+      // Convert to array and sort by total_cost descending
+      return Object.values(groups).sort((a, b) => b.total_cost - a.total_cost);
+    }
+
+    if (loadedTable === 'sales_log') {
+      const groups: Record<string, {
+        item_name: string;
+        count: number;
+        total_purchase_weight_grams: number;
+      }> = {};
+
+      filteredData.forEach(row => {
+        // Normalize the item name: trim whitespace and convert to lowercase for grouping
+        const rawItemName = row.item_name || 'Unnamed Item';
+        const normalizedKey = rawItemName.trim().toLowerCase();
+
+        if (!groups[normalizedKey]) {
+          groups[normalizedKey] = {
+            item_name: rawItemName.trim(), // Store the original trimmed name
+            count: 0,
+            total_purchase_weight_grams: 0
+          };
+        }
+        groups[normalizedKey].count++;
+        groups[normalizedKey].total_purchase_weight_grams += parseFloat(row.purchase_weight_grams) || 0;
+      });
+
+      // Convert to array and sort by total_purchase_weight_grams descending
+      return Object.values(groups).sort((a, b) => b.total_purchase_weight_grams - a.total_purchase_weight_grams);
+    }
+
+    return [];
+  }, [filteredData, isGrouped, loadedTable]);
 
   const fetchTableData = async () => {
     if (!selectedTable) return;
@@ -381,6 +440,7 @@ export const TableDataExport = () => {
 
       if (data) {
         setTableData(data);
+        setLoadedTable(selectedTable);
         const allColumns = Object.keys(data[0] || {});
 
         // Add actions column for sales_log and expense_log
@@ -435,8 +495,8 @@ export const TableDataExport = () => {
   };
 
   const showDefaultColumns = () => {
-    if (selectedTable) {
-      const defaultVisible = DEFAULT_VISIBLE_COLUMNS[selectedTable] || columns.slice(0, 6);
+    if (loadedTable) {
+      const defaultVisible = DEFAULT_VISIBLE_COLUMNS[loadedTable] || columns.slice(0, 6);
       setVisibleColumns(defaultVisible.filter(col => columns.includes(col)));
     }
   };
@@ -448,13 +508,13 @@ export const TableDataExport = () => {
   };
 
   const showFinancialColumns = () => {
-    if (selectedTable === 'sales_log') {
+    if (loadedTable === 'sales_log') {
       const financial = ['actions','asof_date', 'customer_name', 'material', 'purchase_cost', 'selling_cost', 'profit'];
       setVisibleColumns(financial.filter(col => columns.includes(col) || col === 'actions'));
-    } else if (selectedTable === 'expense_log') {
+    } else if (loadedTable === 'expense_log') {
       const financial = ['actions', 'asof_date', 'expense_type', 'item_name', 'cost', 'is_credit'];
       setVisibleColumns(financial.filter(col => columns.includes(col) || col === 'actions'));
-    } else if (selectedTable === 'daily_rates') {
+    } else if (loadedTable === 'daily_rates') {
       const financial = ['asof_date', 'material', 'karat', 'new_price_per_gram', 'old_price_per_gram'];
       setVisibleColumns(financial.filter(col => columns.includes(col)));
     } else {
@@ -463,16 +523,16 @@ export const TableDataExport = () => {
   };
 
   const showBasicInfoColumns = () => {
-    if (selectedTable === 'sales_log') {
+    if (loadedTable === 'sales_log') {
       const basic = ['actions', 'id', 'asof_date', 'customer_name', 'customer_phone', 'material', 'type'];
       setVisibleColumns(basic.filter(col => columns.includes(col) || col === 'actions'));
-    } else if (selectedTable === 'expense_log') {
+    } else if (loadedTable === 'expense_log') {
       const basic = ['actions', 'id', 'asof_date', 'expense_type', 'item_name'];
       setVisibleColumns(basic.filter(col => columns.includes(col) || col === 'actions'));
-    } else if (selectedTable === 'users') {
+    } else if (loadedTable === 'users') {
       const basic = ['id', 'username', 'role', 'created_at'];
       setVisibleColumns(basic.filter(col => columns.includes(col)));
-    } else if (selectedTable === 'activity_log') {
+    } else if (loadedTable === 'activity_log') {
       const basic = ['id', 'action', 'details', 'timestamp'];
       setVisibleColumns(basic.filter(col => columns.includes(col)));
     } else {
@@ -505,7 +565,7 @@ export const TableDataExport = () => {
           if (key.includes('cost') || key.includes('price') || key === 'profit') {
             const numVal = parseFloat(String(val));
             if (!isNaN(numVal)) {
-              displayValue = `₹${numVal.toLocaleString('en-IN')}`;
+              displayValue = numVal.toFixed(2);
             }
           } else if (typeof val === 'boolean') {
             displayValue = val ? 'Yes' : 'No';
@@ -528,15 +588,18 @@ export const TableDataExport = () => {
       }
     }
 
-    // Currency formatting for CSV (simple format to avoid encoding issues)
+    // Export raw numeric values for cost/price columns (no currency symbol)
     if (columnName && (
       columnName.includes('cost') ||
       columnName.includes('price') ||
-      columnName === 'profit'
+      columnName.includes('profit') ||
+      columnName.includes('weight') ||
+      columnName.includes('wastage') ||
+      columnName.includes('purity')
     )) {
       const numValue = parseFloat(value);
       if (!isNaN(numValue)) {
-        return `₹${numValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        return numValue.toFixed(2);
       }
     }
 
@@ -561,6 +624,73 @@ export const TableDataExport = () => {
   };
 
   const downloadCSV = () => {
+    // Check if we're in grouped mode for expense_log
+    if (isGrouped && loadedTable === 'expense_log' && groupedData.length > 0) {
+      // Export grouped data for expense_log
+      const headers = 'Item Name,Count,Total Cost';
+      const rows = groupedData.map(group => {
+        // Properly escape item names with commas or quotes
+        const itemName = group.item_name.includes(',') || group.item_name.includes('"')
+          ? `"${group.item_name.replace(/"/g, '""')}"`
+          : group.item_name;
+        const count = group.count;
+        const totalCost = (group as any).total_cost.toFixed(2);
+        return `${itemName},${count},${totalCost}`;
+      });
+
+      const csvContent = [headers, ...rows].join('\n');
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${loadedTable}_grouped_export_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Downloaded",
+        description: `Grouped ${loadedTable} data exported successfully.`,
+      });
+      return;
+    }
+
+    // Check if we're in grouped mode for sales_log
+    if (isGrouped && loadedTable === 'sales_log' && groupedData.length > 0) {
+      // Export grouped data for sales_log
+      const headers = 'Item Name,Count,Total Purchase Weight (g)';
+      const rows = groupedData.map(group => {
+        // Properly escape item names with commas or quotes
+        const itemName = group.item_name.includes(',') || group.item_name.includes('"')
+          ? `"${group.item_name.replace(/"/g, '""')}"`
+          : group.item_name;
+        const count = group.count;
+        const totalPurchaseWeightGrams = (group as any).total_purchase_weight_grams.toFixed(2);
+        return `${itemName},${count},${totalPurchaseWeightGrams}`;
+      });
+
+      const csvContent = [headers, ...rows].join('\n');
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${loadedTable}_grouped_export_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Downloaded",
+        description: `Grouped ${loadedTable} data exported successfully.`,
+      });
+      return;
+    }
+
+    // Normal export for non-grouped data
     if (filteredData.length === 0) {
       toast({
         title: "No Data",
@@ -571,7 +701,7 @@ export const TableDataExport = () => {
     }
 
     // Sort data by appropriate date column before export
-    const sortColumn = getSortColumn(selectedTable || '');
+    const sortColumn = getSortColumn(loadedTable || '');
 
     // Sort filtered data by date column (newest first)
     const sortedData = [...filteredData].sort((a, b) => {
@@ -600,7 +730,7 @@ export const TableDataExport = () => {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `${selectedTable}_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `${loadedTable}_export_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -608,7 +738,7 @@ export const TableDataExport = () => {
 
     toast({
       title: "Downloaded",
-      description: `${selectedTable} data exported successfully.`,
+      description: `${loadedTable} data exported successfully.`,
     });
   };
 
@@ -761,7 +891,6 @@ export const TableDataExport = () => {
 
   const executeAIQuery = async (sqlQuery: string): Promise<TableData[]> => {
     try {
-      console.log('Executing SQL query:', sqlQuery);
 
       // Use the secure SQL execution function
       const { data, error } = await supabase
@@ -773,7 +902,6 @@ export const TableDataExport = () => {
       }
 
       if (!data || data.length === 0) {
-        console.log('No data returned from query');
         return [];
       }
 
@@ -785,7 +913,6 @@ export const TableDataExport = () => {
         return row;
       });
 
-      console.log('Query results:', results);
       return results;
     } catch (error) {
       console.error('Query execution failed:', error);
@@ -797,7 +924,6 @@ export const TableDataExport = () => {
   const executeQueryFallback = async (sqlQuery: string): Promise<TableData[]> => {
     try {
       // Try to extract meaningful data from the existing table data based on the query
-      console.log('Executing fallback query logic for:', sqlQuery);
 
       if (sqlQuery.includes('SUM(profit)') && sqlQuery.includes('sales_log')) {
         const { data } = await supabase
@@ -893,9 +1019,9 @@ export const TableDataExport = () => {
 
   // Handle edit button click
   const handleEdit = (row: TableData) => {
-    if (selectedTable === 'sales_log') {
+    if (loadedTable === 'sales_log') {
       navigate(`/add-sales?edit=true&id=${row.id}`);
-    } else if (selectedTable === 'expense_log') {
+    } else if (loadedTable === 'expense_log') {
       navigate(`/add-expense?edit=true&id=${row.id}`);
     }
   };
@@ -914,14 +1040,14 @@ export const TableDataExport = () => {
 
   // Handle confirmed deletion with activity logging
   const handleDeleteConfirm = async () => {
-    if (!recordToDelete || !selectedTable) return;
+    if (!recordToDelete || !loadedTable) return;
 
     setIsDeleting(true);
     try {
       // First, log the deletion to activity_log
       const activityLogData = {
         user_id: user?.username, // Foreign key references users(username), not users(id)
-        table_name: selectedTable,
+        table_name: loadedTable,
         action: 'DELETE',
         record_id: recordToDelete.id,
         old_data: recordToDelete,
@@ -947,7 +1073,7 @@ export const TableDataExport = () => {
 
       // Then delete the actual record
       const { error: deleteError } = await supabase
-        .from(selectedTable)
+        .from(loadedTable)
         .delete()
         .eq('id', recordToDelete.id);
 
@@ -1122,7 +1248,7 @@ export const TableDataExport = () => {
 
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
-      {/* AI Query Section - Special Gradient for AI Features */}
+      {/* AI Query Section - Special Gradient for AI Features 
       <Card className="border-0 bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 shadow-lg relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-blue-500/10"></div>
         <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-400/20 to-blue-400/20 rounded-full blur-2xl"></div>
@@ -1163,9 +1289,9 @@ export const TableDataExport = () => {
                   <X className="h-4 w-4" />
                 </Button>
               )}
-            </div>
+            </div> */}
 
-            {/* Voice Input Button */}
+            {/* Voice Input Button 
             <div className="relative">
               <Button
                 variant={isRecording ? "destructive" : "secondary"}
@@ -1184,10 +1310,6 @@ export const TableDataExport = () => {
 
                       if (audioBlob) {
                         setLastRecordedAudio(audioBlob);
-                        console.log('Recorded audio blob:', {
-                          size: audioBlob.size,
-                          type: audioBlob.type
-                        });
 
                         if (audioBlob.size < 1000) {
                           toast({
@@ -1200,7 +1322,6 @@ export const TableDataExport = () => {
 
                         try {
                           const transcription = await openaiService.transcribeAudio(audioBlob);
-                          console.log('Transcription result:', transcription);
 
                           if (transcription && transcription.trim()) {
                             setSearchQuery(transcription.trim());
@@ -1299,9 +1420,9 @@ export const TableDataExport = () => {
                 Voice input is not supported in your current environment. Please use HTTPS or localhost for voice features.
               </AlertDescription>
             </Alert>
-          )}
+          )} */}
 
-          {/* Privacy Protection Notice */}
+          {/* Privacy Protection Notice 
           <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-green-600">🛡️</span>
@@ -1313,9 +1434,9 @@ export const TableDataExport = () => {
             </p>
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
 
-      {/* AI Query Results */}
+      {/* AI Query Results 
       {showQueryResults && (
         <Card className="border-0 bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 shadow-lg relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-indigo-500/5 to-blue-500/5"></div>
@@ -1329,19 +1450,19 @@ export const TableDataExport = () => {
               </span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4 relative">
-            {/* Query Summary */}
+          <CardContent className="space-y-4 relative"> */}
+            {/* Query Summary 
             {querySummary && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h4 className="font-medium text-blue-900 mb-2">Query Summary</h4>
                 <p className="text-blue-800">{querySummary}</p>
               </div>
-            )}
+            )} */}
 
-            {/* Results Table */}
+            {/* Results Table 
             {queryResults.length > 0 && (
-              <div className="space-y-4">
-                {/* Privacy Notice for AI Results */}
+              <div className="space-y-4"> */}
+                {/* Privacy Notice for AI Results 
                 {DataMaskingService.getSafeDataSummary(queryResults).hasSensitiveData && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <div className="flex items-center gap-2">
@@ -1384,9 +1505,9 @@ export const TableDataExport = () => {
                   </Table>
                 </div>
               </div>
-            )}
+            )} */} 
 
-            {/* Developer Information Section - Collapsible */}
+            {/* Developer Information Section - Collapsible 
             {(sqlQuery || queryExplanation) && (
               <div className="border-t pt-4">
                 <Button
@@ -1408,8 +1529,8 @@ export const TableDataExport = () => {
                 </Button>
 
                 {showDeveloperInfo && (
-                  <div className="mt-3 space-y-3">
-                    {/* SQL Query Display */}
+                  <div className="mt-3 space-y-3"> */}
+                    {/* SQL Query Display 
                     {sqlQuery && (
                       <div className="bg-gray-50 border rounded-lg p-4">
                         <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
@@ -1438,7 +1559,7 @@ export const TableDataExport = () => {
             )}
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       
       {/* Table Selection and Date Filters */}
@@ -1552,39 +1673,50 @@ export const TableDataExport = () => {
 
       {/* Regular Table Display */}
       {tableData.length > 0 && (
-        <Card className="border-0 bg-white/90 backdrop-blur-sm shadow-lg">
+        <Card className="border-0 bg-white/90 backdrop-blur-sm shadow-lg w-full">
           <CardHeader>
-            <CardTitle className="flex items-center justify-between text-slate-800">
+            <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between text-slate-800 gap-3">
               <span className="flex items-center gap-2">
                 <Database className="w-5 h-5 text-amber-600" />
-                {selectedTable ? AVAILABLE_TABLES.find(t => t.value === selectedTable)?.label : 'Table Data'}
+                {loadedTable ? AVAILABLE_TABLES.find(t => t.value === loadedTable)?.label : 'Table Data'}
                 <span className="text-sm text-gray-500">({filteredData.length} records)</span>
               </span>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setShowColumnSelector(!showColumnSelector)}>
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                {(loadedTable === 'expense_log' || loadedTable === 'sales_log') && (
+                  <Button
+                    variant={isGrouped ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setIsGrouped(!isGrouped)}
+                    className="flex-1 sm:flex-none"
+                  >
+                    <Group className="w-4 h-4 mr-1" />
+                    <span className="hidden sm:inline">{isGrouped ? 'Ungr' : 'Gr'}oup </span>by Item
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => setShowColumnSelector(!showColumnSelector)} className="flex-1 sm:flex-none">
                   <Settings className="w-4 h-4 mr-1" />
-                  Columns ({visibleColumns.length}/{columns.length})
+                  <span className="hidden sm:inline">Columns </span>({visibleColumns.length}/{columns.length})
                 </Button>
-                <Button variant="outline" size="sm" onClick={clearAllFilters}>
+                <Button variant="outline" size="sm" onClick={clearAllFilters} className="flex-1 sm:flex-none">
                   <X className="w-4 h-4 mr-1" />
-                  Clear Filters
+                  <span className="hidden sm:inline">Clear </span>Filters
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={downloadCSV}
-                  className="border-amber-300 text-amber-700 hover:bg-amber-100"
+                  className="border-amber-300 text-amber-700 hover:bg-amber-100 flex-1 sm:flex-none"
                 >
                   <Download className="w-4 h-4 mr-2" />
-                  Download CSV
+                  <span className="hidden sm:inline">Download </span>CSV
                 </Button>
               </div>
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 sm:p-6">
             {/* Column Selection Panel */}
             {showColumnSelector && (
-              <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+              <div className="mb-6 p-3 sm:p-4 border rounded-lg bg-gray-50">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-medium text-gray-900">Select Columns to Display</h4>
                   <div className="flex flex-wrap gap-2">
@@ -1605,7 +1737,7 @@ export const TableDataExport = () => {
                     </Button>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-60 overflow-y-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-60 overflow-y-auto">
                   {columns.map((column) => (
                     <label key={column} className="flex items-center space-x-2 p-2 hover:bg-white rounded cursor-pointer">
                       <input
@@ -1633,13 +1765,13 @@ export const TableDataExport = () => {
             )}
 
             {/* Column Filters */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 mb-4">
               {visibleColumns.filter(col => col !== 'actions').map((column) => {
                 const isDateColumn = column.includes('date') || column.includes('time');
 
                 return (
                   <div key={column} className="space-y-1">
-                    <Label className="text-xs">{getColumnDisplayName(column)}</Label>
+                    <Label className="text-xs truncate" title={getColumnDisplayName(column)}>{getColumnDisplayName(column)}</Label>
                     {isDateColumn ? (
                       <Popover
                         open={columnDatePopoverOpen[column] || false}
@@ -1650,11 +1782,13 @@ export const TableDataExport = () => {
                             variant="outline"
                             className="w-full justify-start text-left font-normal h-8 text-xs"
                           >
-                            <CalendarIcon className="mr-1 h-3 w-3" />
-                            {columnFilters[column] ?
-                              format(new Date(columnFilters[column]), "MMM dd") :
-                              `Filter Date`
-                            }
+                            <CalendarIcon className="mr-1 h-3 w-3 flex-shrink-0" />
+                            <span className="truncate">
+                              {columnFilters[column] ?
+                                format(new Date(columnFilters[column]), "MMM dd") :
+                                `Filter Date`
+                              }
+                            </span>
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
@@ -1701,72 +1835,187 @@ export const TableDataExport = () => {
               })}
             </div>
 
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {visibleColumns.map((column) => (
-                      <TableHead key={column} className="bg-gray-50 font-semibold">
-                        {getColumnDisplayName(column)}
+            <div className="w-full overflow-x-auto border rounded-lg bg-white">
+              {isGrouped && loadedTable === 'expense_log' ? (
+                // Grouped view for expense_log
+                <Table className="w-full table-auto">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                        Item Name
                       </TableHead>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                        Count
+                      </TableHead>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                        Total Cost (₹)
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {groupedData.map((group, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px] font-medium">
+                          {group.item_name}
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                          {group.count}
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                          {new Intl.NumberFormat('en-IN', {
+                            style: 'currency',
+                            currency: 'INR',
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          }).format((group as any).total_cost)}
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredData.slice(0, 50).map((row, index) => (
-                    <TableRow key={index}>
+                    {/* Grand totals row */}
+                    {groupedData.length > 0 && (
+                      <TableRow className="font-semibold bg-gray-50">
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                          GRAND TOTAL
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                          {groupedData.reduce((sum, group) => sum + group.count, 0)}
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                          {new Intl.NumberFormat('en-IN', {
+                            style: 'currency',
+                            currency: 'INR',
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          }).format(groupedData.reduce((sum, group) => sum + (group as any).total_cost, 0))}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              ) : isGrouped && loadedTable === 'sales_log' ? (
+                // Grouped view for sales_log
+                <Table className="w-full table-auto">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                        Item Name
+                      </TableHead>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                        Count
+                      </TableHead>
+                      <TableHead className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                        Total Purchase Weight (g)
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {groupedData.map((group, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px] font-medium">
+                          {group.item_name}
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                          {group.count}
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                          {((group as any).total_purchase_weight_grams).toFixed(2)} g
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {/* Grand totals row */}
+                    {groupedData.length > 0 && (
+                      <TableRow className="font-semibold bg-gray-50">
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                          GRAND TOTAL
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                          {groupedData.reduce((sum, group) => sum + group.count, 0)}
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                          {groupedData.reduce((sum, group) => sum + (group as any).total_purchase_weight_grams, 0).toFixed(2)} g
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              ) : (
+                // Normal view
+                <Table className="w-full table-auto">
+                  <TableHeader>
+                    <TableRow>
                       {visibleColumns.map((column) => (
-                        <TableCell key={`${index}-${column}`}>
-                          {column === 'actions' ? (
-                            (selectedTable === 'sales_log' || selectedTable === 'expense_log') ? (
-                              <div className="flex gap-1">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleEdit(row)}
-                                  className="h-8 w-8 p-0"
-                                  title="Edit Record"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDeleteClick(row)}
-                                  className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
-                                  title="Delete Record"
-                                >
-                                  <Trash className="h-4 w-4" />
-                                </Button>
+                        <TableHead key={column} className="bg-gray-50 font-semibold px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                          <div className="truncate" title={getColumnDisplayName(column)}>
+                            {getColumnDisplayName(column)}
+                          </div>
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredData.slice(0, 50).map((row, index) => (
+                      <TableRow key={index}>
+                        {visibleColumns.map((column) => (
+                          <TableCell key={`${index}-${column}`} className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                            {column === 'actions' ? (
+                              (loadedTable === 'sales_log' || loadedTable === 'expense_log') ? (
+                                <div className="flex gap-1 flex-nowrap">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleEdit(row)}
+                                    className="h-7 w-7 p-0 sm:h-8 sm:w-8 flex-shrink-0"
+                                    title="Edit Record"
+                                  >
+                                    <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDeleteClick(row)}
+                                    className="h-7 w-7 p-0 sm:h-8 sm:w-8 border-red-300 text-red-600 hover:bg-red-50 flex-shrink-0"
+                                    title="Delete Record"
+                                  >
+                                    <Trash className="h-3 w-3 sm:h-4 sm:w-4" />
+                                  </Button>
+                                </div>
+                              ) : null
+                            ) : (
+                              <div className="max-w-[120px] sm:max-w-[200px] md:max-w-none">
+                                <div className="truncate" title={String(formatCellValue(row[column], column, loadedTable))}>
+                                  {formatCellValue(row[column], column, loadedTable)}
+                                </div>
                               </div>
-                            ) : null
-                          ) : (
-                            formatCellValue(row[column], column, selectedTable)
-                          )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
+                            )}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
 
-                  {/* Totals row */}
-                  {Object.keys(totals).length > 0 && (
-                    <TableRow className="font-semibold bg-gray-50">
-                      {visibleColumns.map((column, index) => (
-                        <TableCell key={`total-${column}`}>
-                          {column === 'actions' ? '' :
-                           index === 0 || (index === 1 && visibleColumns[0] === 'actions') ? 'TOTAL' :
-                           totals[column] !== undefined ?
-                           formatCellValue(totals[column], column, selectedTable) : ''}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-              {filteredData.length > 50 && (
-                <p className="text-sm text-gray-500 mt-2 text-center">
+                    {/* Totals row */}
+                    {Object.keys(totals).length > 0 && (
+                      <TableRow className="font-semibold bg-gray-50">
+                        {visibleColumns.map((column, index) => (
+                          <TableCell key={`total-${column}`} className="px-2 sm:px-4 py-2 text-xs sm:text-sm min-w-[80px]">
+                            <div className="max-w-[120px] sm:max-w-[200px] md:max-w-none">
+                              <div className="truncate">
+                                {column === 'actions' ? '' :
+                                 index === 0 || (index === 1 && visibleColumns[0] === 'actions') ? 'TOTAL' :
+                                 totals[column] !== undefined ?
+                                 formatCellValue(totals[column], column, loadedTable) : ''}
+                              </div>
+                            </div>
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+              {!isGrouped && filteredData.length > 50 && (
+                <div className="text-sm text-gray-500 mt-2 text-center px-4 py-2 bg-gray-50 border-t">
                   Showing first 50 of {filteredData.length} filtered records. Download CSV for complete data.
-                </p>
+                </div>
               )}
             </div>
           </CardContent>
@@ -1786,13 +2035,13 @@ export const TableDataExport = () => {
                 ⚠️ This action cannot be undone and will be logged for audit purposes.
               </div>
 
-              {recordToDelete && selectedTable && (
+              {recordToDelete && loadedTable && (
                 <div className="bg-gray-50 border rounded-lg p-4 space-y-2">
                   <div className="font-medium text-gray-900">
-                    You are about to permanently delete this {selectedTable === 'sales_log' ? 'sales' : 'expense'} record:
+                    You are about to permanently delete this {loadedTable === 'sales_log' ? 'sales' : 'expense'} record:
                   </div>
 
-                  {selectedTable === 'sales_log' && (
+                  {loadedTable === 'sales_log' && (
                     <div className="space-y-1 text-sm">
                       <div><span className="font-medium">Customer:</span> {recordToDelete.customer_name || 'N/A'}</div>
                       <div><span className="font-medium">Date:</span> {recordToDelete.asof_date ? new Date(recordToDelete.asof_date).toLocaleDateString('en-IN') : 'N/A'}</div>
@@ -1802,7 +2051,7 @@ export const TableDataExport = () => {
                     </div>
                   )}
 
-                  {selectedTable === 'expense_log' && (
+                  {loadedTable === 'expense_log' && (
                     <div className="space-y-1 text-sm">
                       <div><span className="font-medium">Date:</span> {recordToDelete.asof_date ? new Date(recordToDelete.asof_date).toLocaleDateString('en-IN') : 'N/A'}</div>
                       <div><span className="font-medium">Expense Type:</span> {recordToDelete.expense_type || 'N/A'}</div>
