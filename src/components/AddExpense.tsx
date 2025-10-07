@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Combobox } from '@/components/ui/combobox';
 import { ArrowLeft, Receipt, Save } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,6 +13,30 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { logActivityWithContext } from '@/lib/activityLogger';
+
+// Common expense item names for consistent categorization
+const COMMON_EXPENSE_ITEMS = [
+  "Tiffin",
+  "Hallmark",
+  "Iraivan",
+  "Salary Amount",
+  "Tea katai",
+  "Mathina Bata",
+  "GV Bata",
+  "Kaviya Bata",
+  "Bata Kaviya",
+  "Anna Bata",
+  "Tharmam",
+  "Souinthar meruku",
+  "Bata Anna",
+  "Bata GV",
+  "Appa Bata",
+  "Appa Vaara Bata",
+  "Bata Mathina",
+  "Bata sadam",
+  "Bata jevitha",
+  "Water",
+];
 
 export const AddExpense = () => {
   const navigate = useNavigate();
@@ -377,13 +402,12 @@ export const AddExpense = () => {
                 <Label htmlFor="item_name" className="text-slate-700 font-medium">
                   Item Name *
                 </Label>
-                <Input
-                  id="item_name"
-                  type="text"
-                  placeholder="Enter item name or description"
+                <Combobox
                   value={formData.item_name}
-                  onChange={(e) => handleInputChange('item_name', e.target.value)}
-                  className="border-slate-300 focus:border-blue-400 focus:ring-blue-400"
+                  onChange={(value) => handleInputChange('item_name', value)}
+                  options={COMMON_EXPENSE_ITEMS}
+                  placeholder="Select or type item name"
+                  emptyText="No matching item. Press Enter to use custom name."
                   disabled={isLoading}
                 />
               </div>
