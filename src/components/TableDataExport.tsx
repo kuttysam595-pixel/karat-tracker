@@ -172,6 +172,14 @@ export const TableDataExport = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isGrouped, setIsGrouped] = useState(false);
 
+  // Financial columns that should be hidden for employee role
+  const FINANCIAL_COLUMNS = ['purchase_cost', 'selling_cost', 'profit', 'old_material_profit'];
+
+  // Filter available tables based on user role
+  const availableTables = user?.role === 'employee'
+    ? AVAILABLE_TABLES.filter(table => table.value === 'sales_log')
+    : AVAILABLE_TABLES;
+
   // Audio recording hook
   const {
     isRecording,
@@ -182,8 +190,8 @@ export const TableDataExport = () => {
     duration
   } = useAudioRecorder();
 
-  // Check if user has access (admin or owner only)
-  const hasAccess = user?.role === 'admin' || user?.role === 'owner';
+  // Check if user has access (admin, owner, or employee)
+  const hasAccess = user?.role === 'admin' || user?.role === 'owner' || user?.role === 'employee';
 
   // Handle audio error notifications
   useEffect(() => {
@@ -201,7 +209,7 @@ export const TableDataExport = () => {
     if (!hasAccess) {
       toast({
         title: "Access Denied",
-        description: "You don't have permission to access this feature. Only admins and owners can export data.",
+        description: "You don't have permission to access this feature.",
         variant: "destructive",
       });
     }
@@ -444,14 +452,25 @@ export const TableDataExport = () => {
         const allColumns = Object.keys(data[0] || {});
 
         // Add actions column for sales_log and expense_log
-        const finalColumns = (selectedTable === 'sales_log' || selectedTable === 'expense_log')
+        let finalColumns = (selectedTable === 'sales_log' || selectedTable === 'expense_log')
           ? ['actions', ...allColumns]
           : allColumns;
+
+        // Filter out financial columns for employee role on sales_log
+        if (user?.role === 'employee' && selectedTable === 'sales_log') {
+          finalColumns = finalColumns.filter(col => !FINANCIAL_COLUMNS.includes(col));
+        }
 
         setColumns(finalColumns);
 
         // Set default visible columns for the selected table
-        const defaultVisible = DEFAULT_VISIBLE_COLUMNS[selectedTable] || allColumns.slice(0, 6);
+        let defaultVisible = DEFAULT_VISIBLE_COLUMNS[selectedTable] || allColumns.slice(0, 6);
+
+        // Filter out financial columns from default visible for employee role on sales_log
+        if (user?.role === 'employee' && selectedTable === 'sales_log') {
+          defaultVisible = defaultVisible.filter(col => !FINANCIAL_COLUMNS.includes(col));
+        }
+
         setVisibleColumns(defaultVisible.filter(col => finalColumns.includes(col)));
 
         toast({
@@ -491,12 +510,23 @@ export const TableDataExport = () => {
   };
 
   const showAllColumns = () => {
-    setVisibleColumns([...columns]);
+    // Filter out financial columns for employee role on sales_log
+    if (user?.role === 'employee' && loadedTable === 'sales_log') {
+      setVisibleColumns(columns.filter(col => !FINANCIAL_COLUMNS.includes(col)));
+    } else {
+      setVisibleColumns([...columns]);
+    }
   };
 
   const showDefaultColumns = () => {
     if (loadedTable) {
-      const defaultVisible = DEFAULT_VISIBLE_COLUMNS[loadedTable] || columns.slice(0, 6);
+      let defaultVisible = DEFAULT_VISIBLE_COLUMNS[loadedTable] || columns.slice(0, 6);
+
+      // Filter out financial columns for employee role on sales_log
+      if (user?.role === 'employee' && loadedTable === 'sales_log') {
+        defaultVisible = defaultVisible.filter(col => !FINANCIAL_COLUMNS.includes(col));
+      }
+
       setVisibleColumns(defaultVisible.filter(col => columns.includes(col)));
     }
   };
@@ -509,7 +539,13 @@ export const TableDataExport = () => {
 
   const showFinancialColumns = () => {
     if (loadedTable === 'sales_log') {
-      const financial = ['actions','asof_date', 'customer_name', 'material', 'purchase_cost', 'selling_cost', 'profit'];
+      let financial = ['actions','asof_date', 'customer_name', 'material', 'purchase_cost', 'selling_cost', 'profit'];
+
+      // Filter out financial columns for employee role
+      if (user?.role === 'employee') {
+        financial = financial.filter(col => !FINANCIAL_COLUMNS.includes(col));
+      }
+
       setVisibleColumns(financial.filter(col => columns.includes(col) || col === 'actions'));
     } else if (loadedTable === 'expense_log') {
       const financial = ['actions', 'asof_date', 'expense_type', 'item_name', 'cost', 'is_credit'];
@@ -1208,7 +1244,7 @@ export const TableDataExport = () => {
           <Alert className="border-0 bg-white/90 backdrop-blur-sm shadow-lg">
             <AlertCircle className="h-4 w-4 text-amber-600" />
             <AlertDescription className="text-slate-700">
-              You don't have permission to access this feature. Only admins and owners can export data.
+              You don't have permission to access this feature.
             </AlertDescription>
           </Alert>
         </div>
@@ -1579,7 +1615,7 @@ export const TableDataExport = () => {
                   <SelectValue placeholder="Choose a table" />
                 </SelectTrigger>
                 <SelectContent>
-                  {AVAILABLE_TABLES.map((table) => (
+                  {availableTables.map((table) => (
                     <SelectItem key={table.value} value={table.value}>
                       {table.label}
                     </SelectItem>
@@ -1726,9 +1762,12 @@ export const TableDataExport = () => {
                     <Button variant="outline" size="sm" onClick={showBasicInfoColumns}>
                       Basic Info
                     </Button>
-                    <Button variant="outline" size="sm" onClick={showFinancialColumns}>
-                      Financial
-                    </Button>
+                    {/* Hide Financial button for employees viewing sales_log */}
+                    {!(user?.role === 'employee' && loadedTable === 'sales_log') && (
+                      <Button variant="outline" size="sm" onClick={showFinancialColumns}>
+                        Financial
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={showDefaultColumns}>
                       Default
                     </Button>

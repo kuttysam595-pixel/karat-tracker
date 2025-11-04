@@ -58,7 +58,7 @@ export const Dashboard = () => {
         <DailyRatesBanner />
 
         {/* Action Cards */}
-        <div className={`grid grid-cols-1 ${(user?.role === 'admin' || user?.role === 'owner') ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6`}>
+        <div className={`grid grid-cols-1 ${(user?.role === 'admin' || user?.role === 'owner' || user?.role === 'employee') ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6`}>
           <Card className="group cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 border-0 bg-white/90 backdrop-blur-sm">
             <CardContent className="p-8">
               <div className="flex items-center justify-between mb-6">
@@ -101,8 +101,8 @@ export const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {/* Table Export Card - Only for Admin and Owner */}
-          {(user?.role === 'admin' || user?.role === 'owner') && (
+          {/* Table Export Card - For Admin, Owner, and Employee */}
+          {(user?.role === 'admin' || user?.role === 'owner' || user?.role === 'employee') && (
             <Card className="group cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 border-0 bg-white/90 backdrop-blur-sm">
               <CardContent className="p-8">
                 <div className="flex items-center justify-between mb-6">
