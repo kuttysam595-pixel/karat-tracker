@@ -173,7 +173,7 @@ export const TableDataExport = () => {
   const [isGrouped, setIsGrouped] = useState(false);
 
   // Financial columns that should be hidden for employee role
-  const FINANCIAL_COLUMNS = ['purchase_cost', 'selling_cost', 'profit', 'old_material_profit'];
+  const FINANCIAL_COLUMNS = ['actions','purchase_cost', 'selling_cost', 'profit', 'old_material_profit'];
 
   // Filter available tables based on user role
   const availableTables = user?.role === 'employee'
